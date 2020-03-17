@@ -6,7 +6,6 @@ Stalker is FRIDA's code tracing engine. It allows threads to be followed, captur
 ## API
 To start to understand the implementation of stalker, we must first understand in detail what it offers to the user. Whilst stalker can be invoked directly through its native gum interface, most users will instead call it via the [JavaScript API](https://frida.re/docs/javascript-api/#stalker) which will call these gum methods on their behalf. The [typescript type definitions](https://github.com/DefinitelyTyped/DefinitelyTyped/blob/master/types/frida-gum/index.d.ts) for gum are well commented and provide a little more detail still. 
 
-### Following
 The main API to stalker from JavaScript is:
 
 ```
@@ -15,9 +14,7 @@ Stalker.follow([threadId, options])
 
 > start stalking `threadId` (or the current thread if omitted)
 
-Let's consider when these calls may be used. Stalking where you provide a thread id is likely to be used where you have a thread of interest and are wondering what it is doing. Perhaps it has an interesting name?
-
-> Thread names can be found using `cat /proc/PID/tasks/TID/comm`. Or perhaps you walked the threads in your process using the FRIDA JavaScript API `Process.enumerateThreads()` and then used a NativeFunction to call:
+Let's consider when these calls may be used. Stalking where you provide a thread id is likely to be used where you have a thread of interest and are wondering what it is doing. Perhaps it has an interesting name? Thread names can be found using `cat /proc/PID/tasks/TID/comm`. Or perhaps you walked the threads in your process using the FRIDA JavaScript API `Process.enumerateThreads()` and then used a NativeFunction to call:
 
 ```
 int pthread_getname_np(pthread_t thread,
@@ -30,6 +27,12 @@ The other scenario where you might call `Stalker.follow` is perhaps from a funct
 
 In either of these scenarios, although stalker has to work slightly differently under the hood, it is all managed by the same simple API for the user, `Stalker.follow`.
 
+## Basic Operation
+When the user calls `Stalker.follow`, under the hood, the javascript engine calls through to either `gum_stalker_follow_me` to follow the current thread, or `gum_stalker_follow(thread_id)` to follow another thread in the process. In the case of the former, the Link Register is used to determine the instruction at which to start stalking (in AARCH64 architecture, the Link Register (LR) is set to the address of the instruction to continue execution following the return from a function call).
+
+
+## Options
+Now lets look at the options when we follow a thread with stalker. Stalker generates events when a followed thread is being executed, these are placed onto a queue and flushed either periodically or when the queue is full. The size and time period can be configured by the options. Events can be generated for on a per-instruction basis either for calls, returns or all instructions. Or they can be generated on a block basis, either when a block is executed, or when it is instrumented by the stalker engine. The difference here is that blocks may be instrumented before they are executed as an optimization by stalker. 
 
 
 Copy basic block to new location and instrument as required.
