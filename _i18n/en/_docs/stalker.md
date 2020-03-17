@@ -136,19 +136,43 @@ Now you will see that the functionality of `gum_stalker_infect` is actually quit
 We will cover these functions in more detail shortly, but first we need a little more background.
 
 ## Basic Operation
+Code can be thought of as a series of blocks of instructions. Each block starts with an optional series of instructions which run in sequence. And ends when we encounter an instruction which causes (or can cause) execution to continue with an instruction other than the one immediately following it in memory.
+
+Stalker works on one block at a time. It starts with either the block after the return to the call to `gum_stalker_follow_me` or the block of code to which the instruction pointer of the target thread is pointing when `gum_stalker_follow` is called.
+
+Stalker works by allocating some memory and writing to it a new instrumented copy of the original block. Instructions may be added to generate events, or carry out any of the other features the stalker engine offers. Stalker must also relocate instructions as necessary. Consider the following instruction:
+
+```
+ADR
+Address of label at a PC-relative offset.
+
+ADR  Xd, label
+
+Xd
+Is the 64-bit name of the general-purpose destination register, in the range 0 to 31.
+
+label
+Is the program label whose address is to be calculated. It is an offset from the address of this instruction, in the range ±1MB.
+```
+
+If this instruction is copied to a different location in memory and executed, then because the address of the label is calculated by adding an offset to the current instruction pointer, then the value would be different. Fortunately, gum has a [relocator](https://github.com/frida/frida-gum/blob/76b583fb2cd30628802a6e0ca8599858431ee717/gum/arch-arm64/gumarm64relocator.c) for just this purpose which is capable of modifying the instruction given its new location so that the correct address is calculated.
+
+Now, recall we said that stalker works one block at a time. How, then do we instrument the next block? We remember also that each block also ends with a branch instruction, well if we modify this branch to instead branch back into the stalker engine, but ensure we store the destination of where the branch was intending to end up, we can instrument the next block and re-direct execution there instead. This same simple process can continue with one block after the next.
+
+Now, this process can be a little slow, so there are a few optimizations which we can apply. First of all, if we execute the same block of code more than once (e.g a loop, or maybe just a function called multiple times) we don't have to re-instrument it all over again. We can just re-execute the same instrumented code. For this reason, a hashtable is kept of all of the blocks which we have encountered before and where we put the instrumented copy of the block.
+
+Secondly, we can instrument blocks ahead of time. For example, if we encounter a call instruction, it is pretty likely (unless it throws an exception) that the callee will eventually return and block immediately following the call will be executed. So we can instrument this block at the same time we instrument the block which is being called. Whilst we may still return into stalker following the call before we are re-directed to the already instrumented block, we may not need to store quite so much of the CPU state when entering and exiting the engine and so may some time.
+
+Finally, if a block of code ends with a deterministic branch (e.g. the destination is fixed and the branch is not conditional) then rather than replacing that last branch with a call back to stalker to instrument the next block, we can instrument the next block ahead of time and direct control flow there without having to re-enter the stalker engine. This process is called backpatching. In actual fact, we can deal with conditional branches too, if we instrument both blocks of code (the one if the branch is taken and the one if it isn't) then we can replace the original conditional branch with one conditional branch which directs control flow to instrumented version of the block encountered when the branch was taken, followed by a unconditional branch to the other instrumented block. We can also deal partially with branches where the target is not static. Say our branch is something like:
+
+```
+BR x0
+```
+
+This sort of instruction is common when calling a function pointer, or class method. Whilst the value of x0 can change, quite often it will actually always be the same. In this case, we can replace the final branch instruction with code which compares the value of x0 against our known function, and if it matches branches to the address of the instrumented copy of the code. This can then be followed by an unconditional branch back to the stalker engine if it doesn't match. So if the value of the function pointer say is changed, then the code will still work and we will re-enter stalker and instrument wherever we end up, however, if as we expect it remains unchanged then we can bypass the stalker engine altogether and go straight to the instrumented function.
 
 
 ## Options
 Now lets look at the options when we follow a thread with stalker. Stalker generates events when a followed thread is being executed, these are placed onto a queue and flushed either periodically or when the queue is full. The size and time period can be configured by the options. Events can be generated for on a per-instruction basis either for calls, returns or all instructions. Or they can be generated on a block basis, either when a block is executed, or when it is instrumented by the stalker engine. The difference here is that blocks may be instrumented before they are executed as an optimization by stalker. 
-
-
-Copy basic block to new location and instrument as required.
-Relocate position dependent instructions.
-Replace final branch insn with call back to stalker to manage the next block.
-If we reach an already instrumented block we can re-use it.
-If a block ends with a deterministic branch then we can patch that block to branch directly to the instrumented next block rather than via the engine.
-When handling a call, we need to push the original return address on the stack so that we can unfollow later.
-gum_stalker_follow_me re-compiles the instructions at its return address and replaces LR with the address of the recompiled code.
-gum_stalker_follow(thread_id) captures the context of the given thread, re-compiles instructions at the PC and updates the PC accordingly.
 
 
