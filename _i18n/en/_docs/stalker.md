@@ -149,10 +149,13 @@ Address of label at a PC-relative offset.
 ADR  Xd, label
 
 Xd
-Is the 64-bit name of the general-purpose destination register, in the range 0 to 31.
+Is the 64-bit name of the general-purpose destination 
+register, in the range 0 to 31.
 
 label
-Is the program label whose address is to be calculated. It is an offset from the address of this instruction, in the range ±1MB.
+Is the program label whose address is to be calculated. 
+It is an offset from the address of this instruction, 
+in the range ±1MB.
 ```
 
 If this instruction is copied to a different location in memory and executed, then because the address of the label is calculated by adding an offset to the current instruction pointer, then the value would be different. Fortunately, gum has a [relocator](https://github.com/frida/frida-gum/blob/76b583fb2cd30628802a6e0ca8599858431ee717/gum/arch-arm64/gumarm64relocator.c) for just this purpose which is capable of modifying the instruction given its new location so that the correct address is calculated.
