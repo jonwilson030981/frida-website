@@ -28,7 +28,57 @@ The other scenario where you might call `Stalker.follow` is perhaps from a funct
 In either of these scenarios, although stalker has to work slightly differently under the hood, it is all managed by the same simple API for the user, `Stalker.follow`.
 
 ## Basic Operation
-When the user calls `Stalker.follow`, under the hood, the javascript engine calls through to either `gum_stalker_follow_me` to follow the current thread, or `gum_stalker_follow(thread_id)` to follow another thread in the process. In the case of the former, the Link Register is used to determine the instruction at which to start stalking (in AARCH64 architecture, the Link Register (LR) is set to the address of the instruction to continue execution following the return from a function call).
+When the user calls `Stalker.follow`, under the hood, the javascript engine calls through to either `gum_stalker_follow_me` to follow the current thread, or `gum_stalker_follow(thread_id)` to follow another thread in the process. 
+
+### gum_stalker_follow_me
+In the case of `gum_stalker_follow_me`, the Link Register is used to determine the instruction at which to start stalking. In AARCH64 architecture, the Link Register (LR) is set to the address of the instruction to continue execution following the return from a function call, it is set to the address of the next instruction by instructions such as BL and BLR. As there is only one link register, if the called function is to call another routine, then the value of LR must be stored (typically this will be on the stack). This value will subsequently be loaded back from the stack into a register and the RET instruction used to return control back to the caller.
+
+Let's look at the code for `gum_stalker_follow_me`. This is the function prototype:
+```
+GUM_API void gum_stalker_follow_me (GumStalker * self,
+    GumStalkerTransformer * transformer, GumEventSink * sink);
+```
+
+So we can see the function is called by the v8 or duktape runtime passing 3 arguments. The first is a context of the stalker object. Note that there may be multiple of these if multiple threads are being stalked at once. The second is a transformer, this can be used to transform the instrumented code as it is being written. The last parameter is the event sink, this is where the generated events are passed as the stalker engine runs.
+
+```
+#ifdef __APPLE__
+  .globl _gum_stalker_follow_me
+_gum_stalker_follow_me:
+#else
+  .globl gum_stalker_follow_me
+  .type gum_stalker_follow_me, %function
+gum_stalker_follow_me:
+#endif
+  stp x29, x30, [sp, -16]!
+  mov x29, sp
+  mov x3, x30
+#ifdef __APPLE__
+  bl __gum_stalker_do_follow_me
+#else
+  bl _gum_stalker_do_follow_me
+#endif
+  ldp x29, x30, [sp], 16
+  br x0
+  ```
+
+We can see that the first instruction STP stores a pair of registers onto the stack. We can notice the expression `[sp, -16]!`. This is a (pre-decrement)[https://thinkingeek.com/2017/05/29/exploring-aarch64-assembler-chapter-8/] which means that the stack is advanced first by 16 bytes, then the two 8 byte register values are stored. We can see the corresponding instruction `ldp x29, x30, [sp], 16` at the bottom of the function. This is restoring these two register values from the stack back into the registers. But what are these two registers?
+
+Well, `x30` is the Link Regster and `x29` is the frame register. Recall that we must store the link regsiter to the stack is we wish to call another function as this will cause it to be overwritten and we need this value in order that we can return to our caller. 
+
+The frame pointer is used to point to the top of the stack at the point a function was called so that all the stack passed arguments and the stack based local variables can be access at a fixed offset from the frame pointer. Again we need to save and restore this as each function will have its value for this register, so we need to store the value which our caller put in there and restore it before we return. Indeed you can see in the next instruction `mov x29, sp` that we set the frame pointer to the current stack pointer.
+
+We can see the next instruction `mov x3, x30`, puts the value of the link register into x3. The first 8 arguments on AARCH64 are passed in the registers x0-x8. So this is being put into the register used for the fourth argument. We then call (branch with link) the function `_gum_stalker_do_follow_me`. So we can see that we pass the first three arguments in x0-x2 untouched, so that `_gum_stalker_do_follow_me` receives the same values we were called with. Finally, we can see after this function returns, we branch to the address we receive as its return value. (In AARCH64 the return value of a function is returned in x0).
+
+```
+gpointer
+_gum_stalker_do_follow_me (GumStalker * self,
+                           GumStalkerTransformer * transformer,
+                           GumEventSink * sink,
+                           gpointer ret_addr)
+```
+
+### gum_stalker_follow
 
 
 ## Options
