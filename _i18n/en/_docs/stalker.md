@@ -3,7 +3,7 @@
 Stalker is FRIDA's code tracing engine. It allows threads to be followed, capturing every function, every block, even every instruction which is executed. A very good overview of the stalker engine is provided [here](https://medium.com/@oleavr/anatomy-of-a-code-tracer-b081aadb0df8) and I recommend that you read it carefully first. Obviously, the implementation is somewhat architecture specific, although there is much in common between them. Stalker is currently supports the ARM64 commonly found on mobile phones and tablets running Android or iOS as well as Intel x86_64 architecture commonly found on desktops and laptops. This page intends to take things to the next level of detail, it disects the ARM64 implementation of stalker and explains in more detail exactly how it works. It is hoped that this may help future efforts to port stalker to other hardware architectures.
 
 
-## API
+## Use Cases
 To start to understand the implementation of stalker, we must first understand in detail what it offers to the user. Whilst stalker can be invoked directly through its native gum interface, most users will instead call it via the [JavaScript API](https://frida.re/docs/javascript-api/#stalker) which will call these gum methods on their behalf. The [typescript type definitions](https://github.com/DefinitelyTyped/DefinitelyTyped/blob/master/types/frida-gum/index.d.ts) for gum are well commented and provide a little more detail still. 
 
 The main API to stalker from JavaScript is:
@@ -27,7 +27,7 @@ The other scenario where you might call `Stalker.follow` is perhaps from a funct
 
 In either of these scenarios, although stalker has to work slightly differently under the hood, it is all managed by the same simple API for the user, `Stalker.follow`.
 
-## Basic Operation
+## Following
 When the user calls `Stalker.follow`, under the hood, the javascript engine calls through to either `gum_stalker_follow_me` to follow the current thread, or `gum_stalker_follow(thread_id)` to follow another thread in the process. 
 
 ### gum_stalker_follow_me
@@ -131,8 +131,11 @@ gum_stalker_infect (GumThreadId thread_id,
 
 So, how does `gum_process_modify_thread` work? Well it depends on the platform. On Linux (and Android) it uses the `ptrace` API (the same one used by GDB) to attach to the thread and read and write registers. But there are a host of complexities. On Linux, you cannot ptrace your own process (or indeed any in the same process group), so FRIDA creates a clone of the current process in its own process group and shares the same memory space. It communicates with it using a UNIX socket. This cloned process acts as a debugger, reading the registers of the original target process and storing them in the shared memory space and then writing them back to the process on demand. Oh and then there is `PR_SET_DUMPABLE` and `PR_SET_PTRACER` which control the permissions of who is allowed to ptrace our original process.
 
-Now you will see that the functionality of `gum_stalker_infect` is actually quite similar to that of `_gum_stalker_do_follow_me` we mentioned earlier.
+Now you will see that the functionality of `gum_stalker_infect` is actually quite similar to that of `_gum_stalker_do_follow_me` we mentioned earlier. Both function carry out essentially the same job, although `_gum_stalker_do_follow_me` is running on the target thread, but `gum_stalker_infect` is not, so it must write some code to be called by the target thread using the [gum_arm64_writer](https://github.com/frida/frida-gum/blob/76b583fb2cd30628802a6e0ca8599858431ee717/gum/arch-arm64/gumarm64writer.c) rather than calling functions directly.
 
+We will cover these functions in more detail shortly, but first we need a little more background.
+
+## Basic Operation
 
 
 ## Options
