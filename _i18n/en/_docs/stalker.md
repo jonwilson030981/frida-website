@@ -39,7 +39,7 @@ GUM_API void gum_stalker_follow_me (GumStalker * self,
     GumStalkerTransformer * transformer, GumEventSink * sink);
 ```
 
-So we can see the function is called by the v8 or duktape runtime passing 3 arguments. The first is a context of the stalker object. Note that there may be multiple of these if multiple threads are being stalked at once. The second is a transformer, this can be used to transform the instrumented code as it is being written. The last parameter is the event sink, this is where the generated events are passed as the stalker engine runs.
+So we can see the function is called by the v8 or duktape runtime passing 3 arguments. The first is a context of the stalker object. Note that there may be multiple of these if multiple threads are being stalked at once. The second is a transformer, this can be used to transform the instrumented code as it is being written (more on this later). The last parameter is the event sink, this is where the generated events are passed as the stalker engine runs.
 
 ```
 #ifdef __APPLE__
@@ -79,6 +79,60 @@ _gum_stalker_do_follow_me (GumStalker * self,
 ```
 
 ### gum_stalker_follow
+This routine has a very similar prototype to `gum_stalker_follow_me`, but has the additional thread_id parameter. Indeed, if asked to follow the current thread, then is will call that function. Let's look at the case when another thread id is specified though.
+
+```
+void
+gum_stalker_follow (GumStalker * self,
+                    GumThreadId thread_id,
+                    GumStalkerTransformer * transformer,
+                    GumEventSink * sink)
+{
+  if (thread_id == gum_process_get_current_thread_id ())
+  {
+    gum_stalker_follow_me (self, transformer, sink);
+  }
+  else
+  {
+    GumInfectContext ctx;
+
+    ctx.stalker = self;
+    ctx.transformer = transformer;
+    ctx.sink = sink;
+
+    gum_process_modify_thread (thread_id, gum_stalker_infect, &ctx);
+  }
+}
+```
+
+We can see that this calls the function `gum_process_modify_thread`. This isn't part of stalker, but part of gum itself. This function takes a callback with a context parameter to call passing the thread context structure. This callback can then modify the `GumCpuContext` structure and `gum_process_modify_thread` will then write the changes back. We can see the context structure below, as you can see it contains fields for all of the registers in the AARCH64 CPU. We can also see below the function prototype of our callback.
+
+```
+typedef GumArm64CpuContext GumCpuContext;
+
+struct _GumArm64CpuContext
+{
+  guint64 pc;
+  guint64 sp;
+
+  guint64 x[29];
+  guint64 fp;
+  guint64 lr;
+  guint8 q[128];
+};
+```
+
+```
+static void
+gum_stalker_infect (GumThreadId thread_id,
+                    GumCpuContext * cpu_context,
+                    gpointer user_data)
+```
+
+So, how does `gum_process_modify_thread` work? Well it depends on the platform. On Linux (and Android) it uses the `ptrace` API (the same one used by GDB) to attach to the thread and read and write registers. But there are a host of complexities. On Linux, you cannot ptrace your own process (or indeed any in the same process group), so FRIDA creates a clone of the current process in its own process group and shares the same memory space. It communicates with it using a UNIX socket. This cloned process acts as a debugger, reading the registers of the original target process and storing them in the shared memory space and then writing them back to the process on demand. Oh and then there is `PR_SET_DUMPABLE` and `PR_SET_PTRACER` which control the permissions of who is allowed to ptrace our original process.
+
+Now you will see that the functionality of `gum_stalker_infect` is actually quite similar to that of `_gum_stalker_do_follow_me` we mentioned earlier.
+
 
 
 ## Options
