@@ -200,14 +200,20 @@ Recall that one of the simple optimizations we apply is that if we attempt to ex
 
 In actual fact, the value of N is the number of times the block needs to be re-executed and match the previously instrumented block (e.g. be unchanged) before we stop performing the comparison. Note that the original copy of the code block is still stored even when the trust threshold is set to `-1` or `0`. Whilst it is not actually needed for these values, it is expected it has been retained to keep things simple. In any case, neither of these is the default setting.
 
-### Excluded regions. 
-These consist of a base and limit and are used to prevent stalker from instrumenting code within these regions to reduce noise and performance overhead.
+### Excluded ranges. 
+Stalker also has the API `Stalker.exclude(range)` consist of a base and limit and are used to prevent stalker from instrumenting code within these regions. Consider, for example, you thread calls a `malloc` inside `libc`. You most likely don't care about the inner workings of the heap and this is not only going to slow down performance, but also generate a whole lot of extraneous events you don't care about. One thing to consider, however, is that as soon as a call is made to an excluded range, stalking of that thread is stopped until it returns. That means, if that thread were to call a function which is not inside a restricted range, a callback perhaps, then this would not be captured by stalker. Just as this can be used to stop the stalking of whole library, it can be used to stop stalking a given function (and its callees) too. This can be particularly useful if your target application is statically linked. Here, was cannot simply ignore all calls to `libc`, but we can find the symbol for `malloc` using `Module.enumerateSymbols()` and ignore that single function.
+
+### Freeze/Thaw. 
+As an extension to DEP, some systems, prevent pages from being marked writeable and executable at the same time. Thus FRIDA must toggle the page permissions between writeable and executable to write instrumented code, and allow that code to execute respectively. When pages are executable, they are said to be frozen (as they cannot be changed) and when they are made writeable again, they are considered thawed.
 
 
 
-Freeze/Thaw. On systems without RWX support, code pages must be thawed (maked RW) to allow them to be modified and frozen (marked RX and instruction caches flushed) to allow them to be executed.
 Frames stored within a page in the context each consist of a code_address and real_address and are added and removed on each call/return. This is used to track calls within stalker and allow call events to be emitted.
+
+Transformers
+
 Callouts are functions (either C or JavaScript) which are emitted as calls when using a transformer to modify instrumented code. These have to be stored by stalker so that we can pass context data to the callout when triggered.
+
 Prologs/Epilogs - These store and restore the context of the CPU on entry and exit from the stalker engine. There are two types, MINIMAL or FULL. Minimal stores only the FPU and caller saved registers (the minimum necessary) and is suitable for most cases. When putting a callout, however, a full context is stored containing the remainder of the registers. Note that the prolog code is long and hence not emitted in each instrumented function, but stored elsewhere in another ExecBlock and called from the instrumented code instead. Note that checks are made and the prolog repeated if the current instrumented function would be too far away to branch directly to the prolog code.
 Counters are optionally kept recording the number of each type of instructions encountered at the end of an instrumented block. These appear to only be used by the unit testing framework.
 EOB - End of block Indicates whether end-of-block has been reached, i.e. we've reached a branch of any kind, like CALL, JMP, BL, RET.
