@@ -189,11 +189,22 @@ Whilst a thread is running outside of stalker, you may be familiar with using `I
 
 The reasons these won't work within stalker is simple, the original function is never called. Each block, before it is executed is instrumented elsewhere in memory and it is this copy which is executed. Stalker supports the API function `Stalker.addCallProbe(address, callback[, data])` to provide this functionality instead. The optional data parameter is passed when the probe callback is registered and will be passed to the callback routine when executed. This pointer, therefore needs to be stored in the stalker engine. Also the address needs to be stored, so that when an instruction is encountered which calls the function, the code can instead be instrumented to call the function first. As multiple functions may call the one to which you add the probe, many instrumented blocks may contain additional instructions to call the probe function. Thus whenever a probe is added or removed, the cached instrumented blocks are all destroyed and so all code has to be re-instrumented.
 
-Trust threshold. When a block has been called more than the the trust threshold times, it is considered stable (e.g. not self-modifying code) and hence a previously instrumented copy can be used and back-patching performed. 
-Specify -1 for no trust (slow), 
-0 to trust code from the get-go, 
-and N to trust code after it has been executed N times. Defaults to 1.
-Excluded regions. These consist of a base and limit and are used to prevent stalker from instrumenting code within these regions to reduce noise and performance overhead.
+### Trust Threshold
+Recall that one of the simple optimizations we apply is that if we attempt to execute a block more than once, on subsequent occassions, we can simply call the instrumented block we created last time around? Well, that only works if the code we are instrumenting hasn't changed. In the case of self-modifying code (which is quite often used as an anti-debugging/anti-disassembly technique to attempt to frustrate analysis of security critical code) the code may change, and hence the instrumented block cannot be re-used. So, how do we detect if a block has changed? We simply keep a copy of the original code in the data-structure along with the instrumented version. Then when we encounted a block again, we can compare the code we are going to instrument with the version we instrumented last time and if they match, we can re-use the block. But performing the comparison every time a block runs may slow things down. So again, this is an area where stalker can be customized.
+
+> `Stalker.trustThreshold`: an integer specifying how many times a 
+> piece of code needs to be executed before it is assumed it can be 
+> trusted to not mutate. Specify -1 for no trust (slow), 0 to trust 
+> code from the get-go, and N to trust code after it has been 
+> executed N times. Defaults to 1.
+
+In actual fact, the value of N is the number of times the block needs to be re-executed and match the previously instrumented block (e.g. be unchanged) before we stop performing the comparison. Note that the original copy of the code block is still stored even when the trust threshold is set to `-1` or `0`. Whilst it is not actually needed for these values, it is expected it has been retained to keep things simple. In any case, neither of these is the default setting.
+
+### Excluded regions. 
+These consist of a base and limit and are used to prevent stalker from instrumenting code within these regions to reduce noise and performance overhead.
+
+
+
 Freeze/Thaw. On systems without RWX support, code pages must be thawed (maked RW) to allow them to be modified and frozen (marked RX and instruction caches flushed) to allow them to be executed.
 Frames stored within a page in the context each consist of a code_address and real_address and are added and removed on each call/return. This is used to track calls within stalker and allow call events to be emitted.
 Callouts are functions (either C or JavaScript) which are emitted as calls when using a transformer to modify instrumented code. These have to be stored by stalker so that we can pass context data to the callout when triggered.
