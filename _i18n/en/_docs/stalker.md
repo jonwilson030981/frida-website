@@ -374,7 +374,11 @@ gum_stalker_init (GumStalker * self)
 }
 ```
 
-So we can see that each slab is 4Mb in size. A 12th of this slab is reserved for its header (the `GumSlab` structure itself). The remainder is filled by an array of `GumExecBlock` structures (note the zero length array at the end of the `GumSlab`), the number of these which can be stored in a slab is stored in `slab_max_blocks`.
+So we can see that each slab is 4Mb in size. A 12th of this slab is reserved for its header, the `GumSlab` structure itself including its `GumExecBlock` array..Note that this is defined as a zero length array at the end of the `GumSlab` structure, but the actual number of these which can fit in the header of the slab is calculated and stored in `slab_max_blocks`.
+
+So what is the remainder of the slab used for? Whilst the header of the slab is used for all the accounting information, the remainder (henceforth referred to as the tail) of the slab is used for the instrumented instructions themselves (they are stored inline in the slab).
+
+So why is a 12th of the slab allocated for the header and the remainder for the instructions. Well the length of each block to be instruemtned will vary considerably and may be affected by the compiler being used and its optimization settings. Presumably empirical testing showed that given the average length of each block this was the best ratio to ensure we didn't run out of space for new `GumExecBlock` entries before we ran out of space for new instrumented blocks in the tail and vice versa.
 
 Let's now look at the code which creates them:
 
@@ -400,3 +404,6 @@ gum_exec_ctx_add_slab (GumExecCtx * ctx)
   return slab;
 }
 ```
+Here, we can see that the `data` field points to the start of the tail where instructions can be written after the header. The `offset` field keeps track our offset into the tail. The `size` field keeps track of the total number of bytes available in the tail. The `num_blocks` field keeps track of how many instrumented blocks have been written to the slab.
+
+Finally, note that where possible we allocate the slab with RWX permissions so that we don't have to freeze and thaw it all of the time. On systems which support RWX the freeze and thaw functions become no-ops.
