@@ -309,5 +309,5 @@ Finally, note that in AARCH64 architecture, it is only possible to make a direct
 
 
 ### Counters 
-Are optionally kept recording the number of each type of instructions encountered at the end of an instrumented block. These appear to only be used by the unit testing framework.
+Finally, there are a series of counters which you can see kept recording the number of each type of instructions encountered at the end of an instrumented block. These appear to only be used by the unit testing framework.
 
