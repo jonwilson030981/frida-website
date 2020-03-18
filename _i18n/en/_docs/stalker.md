@@ -290,7 +290,7 @@ struct _GumArm64CpuContext
 };
 ```
 
-Note however, that the code necessary to write out the necessary cpu registers (the prologue) in either case is quite long (tens of instructions). And the code to restore them afterwards (the epilogue) is similar in length. We don't want to write these at the beginning and end of every block we instrument. Therefore we write these (in the same way we write the instrumented blocks) into a common memory location and simply emit call instructions at the beginning and end of each instrumented block to call these functions. The following functions create these prologues and epilogues.
+Note however, that the code necessary to write out the necessary cpu registers (the prologue) in either case is quite long (tens of instructions). And the code to restore them afterwards (the epilogue) is similar in length. We don't want to write these at the beginning and end of every block we instrument. Therefore we write these (in the same way we write the instrumented blocks) into a common memory location and simply emit call instructions at the beginning and end of each instrumented block to call these functions. These common memory locations are referred to as *helpers*. The following functions create these prologues and epilogues.
 
 ```
 static void gum_exec_ctx_write_minimal_prolog_helper (
@@ -311,3 +311,42 @@ Finally, note that in AARCH64 architecture, it is only possible to make a direct
 ### Counters 
 Finally, there are a series of counters which you can see kept recording the number of each type of instructions encountered at the end of an instrumented block. These appear to only be used by the unit testing framework.
 
+## Slabs
+Let's now take a look at where stalker stores its instrumented code, in slabs. Below are the data-structures used to hold it all:
+
+```
+typedef guint8 GumExecBlockFlags;
+typedef struct _GumExecBlock GumExecBlock;
+typedef struct _GumSlab GumSlab;
+
+struct _GumExecBlock
+{
+  GumExecCtx * ctx;
+  GumSlab * slab;
+
+  guint8 * real_begin;
+  guint8 * real_end;
+  guint8 * real_snapshot;
+  guint8 * code_begin;
+  guint8 * code_end;
+
+  GumExecBlockFlags flags;
+  gint recycle_count;
+};
+
+struct _GumSlab
+{
+  guint8 * data;
+  guint offset;
+  guint size;
+  GumSlab * next;
+
+  guint num_blocks;
+  GumExecBlock blocks[];
+};
+
+enum _GumExecBlockFlags
+{
+  GUM_EXEC_ACTIVATION_TARGET = (1 << 0),
+};
+```
