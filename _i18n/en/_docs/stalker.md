@@ -305,7 +305,7 @@ static void gum_exec_ctx_write_full_prolog_helper (
 static void gum_exec_ctx_write_full_epilog_helper (
     GumExecCtx * ctx, GumArm64Writer * cw);
 ```
-Finally, note that in AARCH64 architecture, it is only possible to make a direct branch to code within 1MB of the caller and using an indirect branch is more expensive (both in terms of code size and performance). Therefore, as we write more and more instrumented blocks, we will get further and further away from the shared prologue and epilogue. If we get more than 1MB away, we simply write out another copy of these prologues and epilogues to use. This gives us a very reasonable tradeoff.
+Finally, note that in AARCH64 architecture, it is only possible to make a direct branch to code within 128Mb of the caller (in either direction) and using an indirect branch is more expensive (both in terms of code size and performance). Therefore, as we write more and more instrumented blocks, we will get further and further away from the shared prologue and epilogue. If we get more than 128Mb away, we simply write out another copy of these prologues and epilogues to use. This gives us a very reasonable tradeoff.
 
 
 ### Counters 
@@ -456,3 +456,14 @@ gum_exec_block_new (GumExecCtx * ctx)
   return gum_exec_block_new (ctx);
 }
 ```
+The function first checks if there is space for a minimally sized block in the tail of the slab (1024 bytes) and whether there is space in the array of `GumExecBlocks` in the slab header for a new entry. If it does then a new entry is created in the array its pointers are set to reference the `GumExecCtx` (the main stalker session context) and the `GumSlab`, The `code_begin` and `code_end` pointers are both set to the first free byte in the tail. The `recycle_count` used by the trust threshold mechanism to determine how many times the block has been encountered unmodified is reset to zero and the remainder of the tail is thawed to allow code to be written to it.
+
+Next if the trust threshold is set to less than zero (recall -1 means blocks are never trusted and always re-written) then we reset the slab `offset` (the pointer to the first free byte in the tail) and start over. This means that any instrumented code written for any blocks within the slab will be overwritten.
+
+Finally, as there is no space left in the current slab and we can't overwrite it because the trust threshold means blocks may be re-used, then we must allocate a new slab by calling the `gum_exec_ctx_add_slab` function we looked at above. We then call `gum_exec_ctx_ensure_inline_helpers_reachable`, more on that in a moment, and then we allocate our block from the new slab. 
+
+Recall, that we use *helpers* (such as the prologues and epilogues that save and restore the cpu context) to prevent having to duplicate these instructions at the beginning and end of every block. As we need to be able to call these from instrumented code we are writing to the slab, and we do so with a direct branch that can only reach 128Mb from the call site, we need to ensure we can get to them. If we haven't written them before, then we write them to our current slab. Note that these helper funtions need to be reachable from any instrumented instruction written in the tail of the slab. Because our slab is only 4Mb in size, then if our helpers are written in our current slab then they will be reachable just fine. If we are allocating a subsequent slab and it is close enough to the previous slab (we only retain the location we last wrote the helper functions to) then we might not need to write them out again and can just rely upon the previous copy in the nearby slab. Note that we are at the mercy of `mmap` for where our slab is allocated in virtual memory and ASLR may dictate that our slab ends up nowhere near the previous one.
+
+We can only assume that either this is unlikely to be a problem, or that this has been factored into the size of the slabs to ensure that writing the helpers to each slab isn't much of an overhead because it doesn't use a significant proportion of their space. An alternative could be to store the location of every time we have written out a helper function so that we have more candidates to choose from (maybe our slab isn't allocated nearby the one previously allocated, but perhaps it is close enough to one of the others). Otherwise, we could consider making a customer allocater using `mmap` to reserve a large (e.g. 128Mb) region of virtual address space and then use `mmap` again to commit the memory one slab at a time as needed. But these are perhaps both overkill.
+
+## Helpers
