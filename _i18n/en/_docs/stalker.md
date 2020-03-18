@@ -554,7 +554,7 @@ Write pseudo code for helpers
 write minimal/full prolog and epilog helpers
 write prolog/write epilog (writing to instrumented block)
 
-# Reading/Writing Context
+## Reading/Writing Context
 load_real_register into
 
 ## Control flow
