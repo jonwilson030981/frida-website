@@ -269,10 +269,16 @@ End of Block (EOB) indicates that the end of a block has been reached. This occu
 End of Input (EOI) indicates that not only have we reached the end of a block, but we have possibly reached the end of the input. e.g. what follows this instruction may not be another instruction. Whilst this is not the case for a call instruction as code control will pass back when the callee returns and so more instructions must follow (note that a compiler will typically generate a branch instruction for a call to a non-returning function like `exit`), if we encounter a branch instruction, or a return instruction, we have no guarantee that code will follow afterwards.
 
 
-### Prologs/Epilogs
-These store and restore the context of the CPU (its registers) on entry and exit from the stalker engine. There are two types, MINIMAL or FULL. Minimal stores only the FPU and caller saved registers (the minimum necessary) and is suitable for most cases. When putting a callout, however, a full context is stored containing the remainder of the registers. Note that the prolog code is long and hence not emitted in each instrumented function, but stored elsewhere in another ExecBlock and called from the instrumented code instead. Note that checks are made and the prolog repeated if the current instrumented function would be too far away to branch directly to the prolog code.
+### Prologues/Epilogues
+When control flow is re-directed from the program into the stalker engine, the registers of the CPU must be saved so that stalker can run and make use of the registers and restore them before control is passed back to the program so that no state is lost.
+
+The [Procedure Call Standard](https://static.docs.arm.com/den0024/a/DEN0024A_v8_architecture_PG.pdf] for AARCH 64 states that some regsiters (notably x19 to x29) are callee saved registers. This means that when the compiler generates code which makes use of these registers, it must store them first. Hence it is not strictly necessary to save these registers to the context structure, since they will be restored if they are used by the code within the stalker engine. This *"minimal"* context is sufficient for most purposes.
+
+However, if the stalker engine is to call a probe registered by `Stalker.addCallProbe`, or a callout created by `iterator.putCallout` (called by a Transformer), then these callbacks will expect to receive the full cpu context as an argument. And they will expect to be able to modify this context and for the changes to take effect when control is passed back tot he application code. Thus for these instances, we must write a *"full"* context and its layout must match the expected format dictated by the structure `GumArm64CpuContext`.
 
 ```
+typedef struct _GumArm64CpuContext GumArm64CpuContext;
+
 struct _GumArm64CpuContext
 {
   guint64 pc;
@@ -283,6 +289,21 @@ struct _GumArm64CpuContext
   guint8 q[128]; /* FPU, NEON (SIMD), CRYPTO regs */
 };
 ```
+
+Note however, that the code necessary to write out the necessary cpu registers (the prologue) in either case is quite long (tens of instructions). And the code to restore them afterwards (the epilogue) is similar in length. We don't want to write these at the beginning and end of every block we instrument. Therefore we write these (in the same way we write the instrumented blocks) into a common memory location and simply emit call instructions at the beginning and end of each instrumented block to call these functions. The following functions create these prologues and epilogues.
+
+```
+static void gum_exec_ctx_write_minimal_prolog_helper (GumExecCtx * ctx,
+    GumArm64Writer * cw);
+static void gum_exec_ctx_write_minimal_epilog_helper (GumExecCtx * ctx,
+    GumArm64Writer * cw);
+static void gum_exec_ctx_write_full_prolog_helper (GumExecCtx * ctx,
+    GumArm64Writer * cw);
+static void gum_exec_ctx_write_full_epilog_helper (GumExecCtx * ctx,
+    GumArm64Writer * cw);
+```
+Finally, note that in AARCH64 architecture, it is only possible to make a direct branch to code within 1MB of the caller and using an indirect branch is more expensive (both in terms of code size and performance). Therefore, as we write more and more instrumented blocks, we will get further and further away from the shared prologue and epilogue. If we get more than 1MB away, we simply write out another copy of these prologues and epilogues to use. This gives us a very reasonable tradeoff.
+
 
 ### Counters 
 Are optionally kept recording the number of each type of instructions encountered at the end of an instrumented block. These appear to only be used by the unit testing framework.
