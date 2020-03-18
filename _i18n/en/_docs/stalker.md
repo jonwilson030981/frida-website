@@ -293,14 +293,17 @@ struct _GumArm64CpuContext
 Note however, that the code necessary to write out the necessary cpu registers (the prologue) in either case is quite long (tens of instructions). And the code to restore them afterwards (the epilogue) is similar in length. We don't want to write these at the beginning and end of every block we instrument. Therefore we write these (in the same way we write the instrumented blocks) into a common memory location and simply emit call instructions at the beginning and end of each instrumented block to call these functions. The following functions create these prologues and epilogues.
 
 ```
-static void gum_exec_ctx_write_minimal_prolog_helper (GumExecCtx * ctx,
-    GumArm64Writer * cw);
-static void gum_exec_ctx_write_minimal_epilog_helper (GumExecCtx * ctx,
-    GumArm64Writer * cw);
-static void gum_exec_ctx_write_full_prolog_helper (GumExecCtx * ctx,
-    GumArm64Writer * cw);
-static void gum_exec_ctx_write_full_epilog_helper (GumExecCtx * ctx,
-    GumArm64Writer * cw);
+static void gum_exec_ctx_write_minimal_prolog_helper (
+    GumExecCtx * ctx, GumArm64Writer * cw);
+    
+static void gum_exec_ctx_write_minimal_epilog_helper (
+    GumExecCtx * ctx, GumArm64Writer * cw);
+    
+static void gum_exec_ctx_write_full_prolog_helper (
+    GumExecCtx * ctx, GumArm64Writer * cw);
+    
+static void gum_exec_ctx_write_full_epilog_helper (
+    GumExecCtx * ctx, GumArm64Writer * cw);
 ```
 Finally, note that in AARCH64 architecture, it is only possible to make a direct branch to code within 1MB of the caller and using an indirect branch is more expensive (both in terms of code size and performance). Therefore, as we write more and more instrumented blocks, we will get further and further away from the shared prologue and epilogue. If we get more than 1MB away, we simply write out another copy of these prologues and epilogues to use. This gives us a very reasonable tradeoff.
 
