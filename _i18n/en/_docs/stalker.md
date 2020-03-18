@@ -237,12 +237,40 @@ gum_default_stalker_transformer_transform_block (
 
 It is called by the function responsible for generating instrumented code, `gum_exec_ctx_obtain_block_for` and its job is to generate the instrumented code. We can see that it does this using a loop to process on instruction at a time. First retrieving an instruction from the iterator, then telling stalker to instrument the instruction as is (without modification). These two functions are implemented inside stalker itself. The first is responsible for parsing a `cs_insn` and updating the internal state. This `cs_insn` type is a datatype used by the internal [capstone](http://www.capstone-engine.org/) disassembler to represent an instruction. The second is responsible for writing out the instrumented instruction (or set of instructions). We will cover these in more detail later.
 
-EOB - End of block Indicates whether end-of-block has been reached, i.e. we've reached a branch of any kind, like CALL, JMP, BL, RET.
-EOI - Indicates whether end-of-input has been reached, e.g. we've reached JMP/B/RET, an instruction after which there may or may not be valid code.
+Rather than using the default transformer, the user can instead provide a custom implementation which can replace and insert instructions at will. A good example is provided in the [API documentation](https://frida.re/docs/javascript-api/#stalker).
 
 
-Callouts are functions (either C or JavaScript) which are emitted as calls when using a transformer to modify instrumented code. These have to be stored by stalker so that we can pass context data to the callout when triggered.
+### Callouts
+Transformers can also make callouts. That is they instruct stalker to emit instructions to make a call to a javascript (or CModule) function passing the cpu context and an optional context parameter. This function is then able to modify or inspect registers at will. This information is stored in a ```GumCallOutEntry```.
 
-Prologs/Epilogs - These store and restore the context of the CPU on entry and exit from the stalker engine. There are two types, MINIMAL or FULL. Minimal stores only the FPU and caller saved registers (the minimum necessary) and is suitable for most cases. When putting a callout, however, a full context is stored containing the remainder of the registers. Note that the prolog code is long and hence not emitted in each instrumented function, but stored elsewhere in another ExecBlock and called from the instrumented code instead. Note that checks are made and the prolog repeated if the current instrumented function would be too far away to branch directly to the prolog code.
+```
+typedef void (* GumStalkerCallout) (GumCpuContext * cpu_context,
+    gpointer user_data);
+    
+typedef struct _GumCalloutEntry GumCalloutEntry;
+
+struct _GumCalloutEntry
+{
+  GumStalkerCallout callout;
+  gpointer data;
+  GDestroyNotify data_destroy;
+
+  gpointer pc;
+
+  GumExecCtx * exec_context;
+};
+```
+
+### EOB/EOI
+Recall that the [relocator](https://github.com/frida/frida-gum/blob/76b583fb2cd30628802a6e0ca8599858431ee717/gum/arch-arm64/gumarm64relocator.c) is heavily involved in generating the instrumented code. It has two important properties which control its state.
+
+End of Block (EOB) indicates that the end of a block has been reached. This occurs when we encounter *any* branch instruction. A branch, a call, or a return instruction.
+
+End of Input (EOI) indicates that not only have we reached the end of a block, but we have possibly reached the end of the input. e.g. what follows this instruction may not be another instruction. Whilst this is not the case for a call instruction as code control will pass back when the callee returns and so more instructions must follow (note that a compiler will typically generate a branch instruction for a call to a non-returning function like `exit`), if we encounter a branch instruction, or a return instruction, we have no guarantee that code will follow afterwards.
+
+
+### Prologs/Epilogs
+These store and restore the context of the CPU on entry and exit from the stalker engine. There are two types, MINIMAL or FULL. Minimal stores only the FPU and caller saved registers (the minimum necessary) and is suitable for most cases. When putting a callout, however, a full context is stored containing the remainder of the registers. Note that the prolog code is long and hence not emitted in each instrumented function, but stored elsewhere in another ExecBlock and called from the instrumented code instead. Note that checks are made and the prolog repeated if the current instrumented function would be too far away to branch directly to the prolog code.
+
 Counters are optionally kept recording the number of each type of instructions encountered at the end of an instrumented block. These appear to only be used by the unit testing framework.
 
