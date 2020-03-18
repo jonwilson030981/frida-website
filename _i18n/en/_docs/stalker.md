@@ -270,7 +270,20 @@ End of Input (EOI) indicates that not only have we reached the end of a block, b
 
 
 ### Prologs/Epilogs
-These store and restore the context of the CPU on entry and exit from the stalker engine. There are two types, MINIMAL or FULL. Minimal stores only the FPU and caller saved registers (the minimum necessary) and is suitable for most cases. When putting a callout, however, a full context is stored containing the remainder of the registers. Note that the prolog code is long and hence not emitted in each instrumented function, but stored elsewhere in another ExecBlock and called from the instrumented code instead. Note that checks are made and the prolog repeated if the current instrumented function would be too far away to branch directly to the prolog code.
+These store and restore the context of the CPU (its registers) on entry and exit from the stalker engine. There are two types, MINIMAL or FULL. Minimal stores only the FPU and caller saved registers (the minimum necessary) and is suitable for most cases. When putting a callout, however, a full context is stored containing the remainder of the registers. Note that the prolog code is long and hence not emitted in each instrumented function, but stored elsewhere in another ExecBlock and called from the instrumented code instead. Note that checks are made and the prolog repeated if the current instrumented function would be too far away to branch directly to the prolog code.
 
-Counters are optionally kept recording the number of each type of instructions encountered at the end of an instrumented block. These appear to only be used by the unit testing framework.
+```
+struct _GumArm64CpuContext
+{
+  guint64 pc;
+  guint64 sp; /* x31 */
+  guint64 x[29];
+  guint64 fp; /* x29 - frame pointer */
+  guint64 lr; /* x30 */
+  guint8 q[128]; /* FPU, NEON (SIMD), CRYPTO regs */
+};
+```
+
+### Counters 
+Are optionally kept recording the number of each type of instructions encountered at the end of an instrumented block. These appear to only be used by the unit testing framework.
 
