@@ -523,4 +523,52 @@ gum_arm64_writer_put_brk_imm (cw, 14);
 This inserts a break instruction which is intended to simplify debugging.
 
 Lastly, if stalker is configured to, `gum_exec_ctx_obtain_block_for` will generate an event of type `GUM_COMPILE` when compiling the block.
+
+# TODO
+Reference functions involved in checking helpers are reachable above.
+
 ## Helpers
+```
+static void
+gum_exec_ctx_ensure_inline_helpers_reachable (GumExecCtx * ctx)
+{
+  gum_exec_ctx_ensure_helper_reachable (ctx, &ctx->last_prolog_minimal,
+      gum_exec_ctx_write_minimal_prolog_helper);
+  gum_exec_ctx_ensure_helper_reachable (ctx, &ctx->last_epilog_minimal,
+      gum_exec_ctx_write_minimal_epilog_helper);
+
+  gum_exec_ctx_ensure_helper_reachable (ctx, &ctx->last_prolog_full,
+      gum_exec_ctx_write_full_prolog_helper);
+  gum_exec_ctx_ensure_helper_reachable (ctx, &ctx->last_epilog_full,
+      gum_exec_ctx_write_full_epilog_helper);
+
+  gum_exec_ctx_ensure_helper_reachable (ctx, &ctx->last_stack_push,
+      gum_exec_ctx_write_stack_push_helper);
+  gum_exec_ctx_ensure_helper_reachable (ctx, &ctx->last_stack_pop_and_go,
+      gum_exec_ctx_write_stack_pop_and_go_helper);
+}
+```
+Write pseudo code for helpers
+
+## Context
+write minimal/full prolog and epilog helpers
+write prolog/write epilog (writing to instrumented block)
+
+# Reading/Writing Context
+load_real_register into
+
+## Control flow
+Code which runs and code which writes code.
+Different times of execution.
+
+## Iterator
+next & keep
+call to virtualize instructions
+
+## Virtualize functions
+
+## Emitting events
+write_X_event_code
+
+## Unfollow and tidy up
+
