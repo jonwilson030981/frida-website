@@ -466,4 +466,44 @@ Recall, that we use *helpers* (such as the prologues and epilogues that save and
 
 We can only assume that either this is unlikely to be a problem, or that this has been factored into the size of the slabs to ensure that writing the helpers to each slab isn't much of an overhead because it doesn't use a significant proportion of their space. An alternative could be to store the location of every time we have written out a helper function so that we have more candidates to choose from (maybe our slab isn't allocated nearby the one previously allocated, but perhaps it is close enough to one of the others). Otherwise, we could consider making a customer allocater using `mmap` to reserve a large (e.g. 128Mb) region of virtual address space and then use `mmap` again to commit the memory one slab at a time as needed. But these are perhaps both overkill.
 
+## Instrumenting Blocks
+The main function which instruments a code block is called `gum_exec_ctx_obtain_block_for`. It first looks for an existing block in the hashtable which is indexed on the address of the original block which was instrumented. If it finds one and the afforementioned constraints around the trust thresold are met then it can simply be returned.
+
+The fields of the `GumExecBlock` are used as follows. The `real_begin` is set to the start of the original block of code to be instrumented. The `code_begin` field is points to the first free byte of the tail (remember this was set by the `gum_exec_block_new` function discussed above). A `GumArm64Relocator` is initialized to read code from the original code at `real_begin` and a `GumArm64Writer` is initialized to write its output to the slab starting at `code_begin`. Each of these items is packaged into a `GumGeneratorContext` and finally this is used to construct a `GumStalkerIterator`.
+
+This iterator is then passed to the transformer. Recall the default implementations is as follows:
+
+```
+static void
+gum_default_stalker_transformer_transform_block (
+    GumStalkerTransformer * transformer,
+    GumStalkerIterator * iterator,
+    GumStalkerWriter * output)
+{
+  while (gum_stalker_iterator_next (iterator, NULL))
+  {
+    gum_stalker_iterator_keep (iterator);
+  }
+}
+```
+
+We will gloss over the details of `gum_stalker_iterator_next` and `gum_stalker_iterator_keep` for new. But in essence, this causes the iterator to read code one instruction at a time from the relocator and write the relocated instruction out using the writer. Following this process, the `GumExecBlock` structure can be updated. It's field `real_end` can be set to the address where the relocator read up to, and its field `code_end` can be set to the address which the writer wrote up to. Thus `real_begin` and `real_end` mark the limits of the original block and `code_begin` and `code_end` mark the limits of the newly instrumented block. Finally, `gum_exec_ctx_obtain_block_for` calls `gum_exec_block_commit` which takes a copy of the original block and places it immediately after the instrumented copy. The field `real_snapshot` points to this (and is thus identical to `code_end`). Next the slab's `offset` field is update to reflect the space used by our instrumented block and our copy of the original code. Finally, the block is frozen to allow it to be executed.
+
+```
+static void
+gum_exec_block_commit (GumExecBlock * block)
+{
+  gsize code_size, real_size;
+
+  code_size = block->code_end - block->code_begin;
+  block->slab->offset += code_size;
+
+  real_size = block->real_end - block->real_begin;
+  block->real_snapshot = block->code_end;
+  memcpy (block->real_snapshot, block->real_begin, real_size);
+  block->slab->offset += real_size;
+
+  gum_stalker_freeze (block->ctx->stalker, block->code_begin, code_size);
+}
+```
 ## Helpers
