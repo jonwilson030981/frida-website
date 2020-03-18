@@ -350,3 +350,53 @@ enum _GumExecBlockFlags
   GUM_EXEC_ACTIVATION_TARGET = (1 << 0),
 };
 ```
+
+Now lets look at some code when stalker is initialized which configures their size:
+
+```
+#define GUM_CODE_SLAB_MAX_SIZE  (4 * 1024 * 1024)
+#define GUM_EXEC_BLOCK_MIN_SIZE 1024
+
+static void
+gum_stalker_init (GumStalker * self)
+{
+  ...
+  
+  self->page_size = gum_query_page_size ();
+  self->slab_size =
+      GUM_ALIGN_SIZE (GUM_CODE_SLAB_MAX_SIZE, self->page_size);
+  self->slab_header_size =
+      GUM_ALIGN_SIZE (GUM_CODE_SLAB_MAX_SIZE / 12, self->page_size);
+  self->slab_max_blocks = (self->slab_header_size -
+      G_STRUCT_OFFSET (GumSlab, blocks)) / sizeof (GumExecBlock);
+      
+  ...
+}
+```
+
+So we can see that each slab is 4Mb in size. A 12th of this slab is reserved for its header (the `GumSlab` structure itself). The remainder is filled by an array of `GumExecBlock` structures (note the zero length array at the end of the `GumSlab`), the number of these which can be stored in a slab is stored in `slab_max_blocks`.
+
+Let's now look at the code which creates them:
+
+```
+static GumSlab *
+gum_exec_ctx_add_slab (GumExecCtx * ctx)
+{
+  GumSlab * slab;
+  GumStalker * stalker = ctx->stalker;
+
+  slab = gum_memory_allocate (NULL, stalker->slab_size, stalker->page_size,
+      stalker->is_rwx_supported ? GUM_PAGE_RWX : GUM_PAGE_RW);
+
+  slab->data = (guint8 *) slab + stalker->slab_header_size;
+  slab->offset = 0;
+  slab->size = stalker->slab_size - stalker->slab_header_size;
+  slab->next = ctx->code_slab;
+
+  slab->num_blocks = 0;
+
+  ctx->code_slab = slab;
+
+  return slab;
+}
+```
