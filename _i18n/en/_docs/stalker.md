@@ -506,4 +506,21 @@ gum_exec_block_commit (GumExecBlock * block)
   gum_stalker_freeze (block->ctx->stalker, block->code_begin, code_size);
 }
 ```
+
+Now let's just return to a few more details of the function `gum_exec_ctx_obtain_block_for`. First we should note that each block has a single instruction prefixed. 
+
+```
+gum_arm64_writer_put_ldp_reg_reg_reg_offset (cw, ARM64_REG_X16, ARM64_REG_X17,
+      ARM64_REG_SP, 16 + GUM_RED_ZONE_SIZE, GUM_INDEX_POST_ADJUST);
+```
+This instruction is the restoration prolog (denoted by `GUM_RESTORATION_PROLOG_SIZE`). This skipped in normal usage (hence you will note this constant is added on by the functions `_gum_stalker_do_follow_me` and `gum_stalker_infect` when returning the address of the instrumented code. When return instructions are instrumented, however, if the return is to a block which has already been instrumented, then we can simply return to that block rather than returning back into the stalker engine. This requires a couple of registers to be used in the generated assembly to figure out though and this means they have to be stored on the stack (written by `gum_exec_block_write_ret_transfer_code`), in the event that we can return directly to an instrumented block, we return to this first instruction which restores these registers from the stack. This will be covered in more detail later.
+
+Secondly, we can see the function `gum_exec_ctx_obtain_block_for` does the following after the instrumented block is written:
+```
+gum_arm64_writer_put_brk_imm (cw, 14);
+```
+
+This inserts a break instruction which is intended to simplify debugging.
+
+Lastly, if stalker is configured to, `gum_exec_ctx_obtain_block_for` will generate an event of type `GUM_COMPILE` when compiling the block.
 ## Helpers
