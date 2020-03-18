@@ -406,4 +406,53 @@ gum_exec_ctx_add_slab (GumExecCtx * ctx)
 ```
 Here, we can see that the `data` field points to the start of the tail where instructions can be written after the header. The `offset` field keeps track our offset into the tail. The `size` field keeps track of the total number of bytes available in the tail. The `num_blocks` field keeps track of how many instrumented blocks have been written to the slab.
 
-Finally, note that where possible we allocate the slab with RWX permissions so that we don't have to freeze and thaw it all of the time. On systems which support RWX the freeze and thaw functions become no-ops.
+Note that where possible we allocate the slab with RWX permissions so that we don't have to freeze and thaw it all of the time. On systems which support RWX the freeze and thaw functions become no-ops.
+
+Lastly, we can see that each slab contains a `next` pointer which can be used to link slabs together to form a singly-linked list. This is used so we can walk them and dispose them all when stalker is finished.
+
+## Blocks
+Now we understand how the slabs work. Let's look in more detail at the blocks. As we know, we can store multiple blocks in a slab and write their instructions to the tail. Let's look at the code to allocate a new block:
+
+```
+static GumExecBlock *
+gum_exec_block_new (GumExecCtx * ctx)
+{
+  GumStalker * stalker = ctx->stalker;
+  GumSlab * slab = ctx->code_slab;
+  gsize available;
+
+  available = (slab != NULL) ? slab->size - slab->offset : 0;
+  if (available >= GUM_EXEC_BLOCK_MIN_SIZE &&
+      slab->num_blocks != stalker->slab_max_blocks)
+  {
+    GumExecBlock * block = slab->blocks + slab->num_blocks;
+
+    block->ctx = ctx;
+    block->slab = slab;
+
+    block->code_begin = slab->data + slab->offset;
+    block->code_end = block->code_begin;
+
+    block->flags = 0;
+    block->recycle_count = 0;
+
+    gum_stalker_thaw (stalker, block->code_begin, available);
+    slab->num_blocks++;
+
+    return block;
+  }
+
+  if (stalker->trust_threshold < 0 && slab != NULL)
+  {
+    slab->offset = 0;
+
+    return gum_exec_block_new (ctx);
+  }
+
+  gum_exec_ctx_add_slab (ctx);
+
+  gum_exec_ctx_ensure_inline_helpers_reachable (ctx);
+
+  return gum_exec_block_new (ctx);
+}
+```
