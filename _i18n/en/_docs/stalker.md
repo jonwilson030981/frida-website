@@ -218,11 +218,31 @@ struct _GumExecFrame
 };
 ```
 
-Transformers
+### Transformer
+A `GumStalkerTransformer` type is used to generate the instrumented code. The implementation of the default transformer looks like this:
+
+```
+static void
+gum_default_stalker_transformer_transform_block (
+    GumStalkerTransformer * transformer,
+    GumStalkerIterator * iterator,
+    GumStalkerWriter * output)
+{
+  while (gum_stalker_iterator_next (iterator, NULL))
+  {
+    gum_stalker_iterator_keep (iterator);
+  }
+}
+```
+
+It is called by the function responsible for generating instrumented code, `gum_exec_ctx_obtain_block_for` and its job is to generate the instrumented code. We can see that it does this using a loop to process on instruction at a time. First retrieving an instruction from the iterator, then telling stalker to instrument the instruction as is (without modification). These two functions are implemented inside stalker itself. The first is responsible for parsing a `cs_insn` and updating the internal state. This `cs_insn` type is a datatype used by the internal [capstone](http://www.capstone-engine.org/) disassembler to represent an instruction. The second is responsible for writing out the instrumented instruction (or set of instructions). We will cover these in more detail later.
+
+EOB - End of block Indicates whether end-of-block has been reached, i.e. we've reached a branch of any kind, like CALL, JMP, BL, RET.
+EOI - Indicates whether end-of-input has been reached, e.g. we've reached JMP/B/RET, an instruction after which there may or may not be valid code.
+
 
 Callouts are functions (either C or JavaScript) which are emitted as calls when using a transformer to modify instrumented code. These have to be stored by stalker so that we can pass context data to the callout when triggered.
 
 Prologs/Epilogs - These store and restore the context of the CPU on entry and exit from the stalker engine. There are two types, MINIMAL or FULL. Minimal stores only the FPU and caller saved registers (the minimum necessary) and is suitable for most cases. When putting a callout, however, a full context is stored containing the remainder of the registers. Note that the prolog code is long and hence not emitted in each instrumented function, but stored elsewhere in another ExecBlock and called from the instrumented code instead. Note that checks are made and the prolog repeated if the current instrumented function would be too far away to branch directly to the prolog code.
 Counters are optionally kept recording the number of each type of instructions encountered at the end of an instrumented block. These appear to only be used by the unit testing framework.
-EOB - End of block Indicates whether end-of-block has been reached, i.e. we've reached a branch of any kind, like CALL, JMP, BL, RET.
-EOI - Indicates whether end-of-input has been reached, e.g. we've reached JMP/B/RET, an instruction after which there may or may not be valid code.
+
