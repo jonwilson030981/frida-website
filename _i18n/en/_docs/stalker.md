@@ -182,4 +182,22 @@ We can also provide one of two callbacks `onReceive` or `onCallSummary`. The for
 
 ## Terminology
 
+Before we can carry on with describing the detailed implementation of stalker, we first need to understand some key terminology and concepts that are used in the design.
 
+### Probes
+Whilst a thread is running outside of stalker, you may be familiar with using `Interceptor.attach` to get a callback when a given function is called. When a thread is running in stalker, however, these interceptors won't work. These interceptors work by patching the first few instructions (prologue) of the target function to re-direct execution into FRIDA. Frida copies and relocates these first few instructions somewhere else so that after the `onEnter` callback has been completed, it can re-direct control flow back to the original function.
+
+The reasons these won't work within stalker is simple, the original function is never called. Each block, before it is executed is instrumented elsewhere in memory and it is this copy which is executed. Stalker supports the API function `Stalker.addCallProbe(address, callback[, data])` to provide this functionality instead. The optional data parameter is passed when the probe callback is registered and will be passed to the callback routine when executed. This pointer, therefore needs to be stored in the stalker engine. Also the address needs to be stored, so that when an instruction is encountered which calls the function, the code can instead be instrumented to call the function first. As multiple functions may call the one to which you add the probe, many instrumented blocks may contain additional instructions to call the probe function. Thus whenever a probe is added or removed, the cached instrumented blocks are all destroyed and so all code has to be re-instrumented.
+
+Trust threshold. When a block has been called more than the the trust threshold times, it is considered stable (e.g. not self-modifying code) and hence a previously instrumented copy can be used and back-patching performed. 
+Specify -1 for no trust (slow), 
+0 to trust code from the get-go, 
+and N to trust code after it has been executed N times. Defaults to 1.
+Excluded regions. These consist of a base and limit and are used to prevent stalker from instrumenting code within these regions to reduce noise and performance overhead.
+Freeze/Thaw. On systems without RWX support, code pages must be thawed (maked RW) to allow them to be modified and frozen (marked RX and instruction caches flushed) to allow them to be executed.
+Frames stored within a page in the context each consist of a code_address and real_address and are added and removed on each call/return. This is used to track calls within stalker and allow call events to be emitted.
+Callouts are functions (either C or JavaScript) which are emitted as calls when using a transformer to modify instrumented code. These have to be stored by stalker so that we can pass context data to the callout when triggered.
+Prologs/Epilogs - These store and restore the context of the CPU on entry and exit from the stalker engine. There are two types, MINIMAL or FULL. Minimal stores only the FPU and caller saved registers (the minimum necessary) and is suitable for most cases. When putting a callout, however, a full context is stored containing the remainder of the registers. Note that the prolog code is long and hence not emitted in each instrumented function, but stored elsewhere in another ExecBlock and called from the instrumented code instead. Note that checks are made and the prolog repeated if the current instrumented function would be too far away to branch directly to the prolog code.
+Counters are optionally kept recording the number of each type of instructions encountered at the end of an instrumented block. These appear to only be used by the unit testing framework.
+EOB - End of block Indicates whether end-of-block has been reached, i.e. we've reached a branch of any kind, like CALL, JMP, BL, RET.
+EOI - Indicates whether end-of-input has been reached, e.g. we've reached JMP/B/RET, an instruction after which there may or may not be valid code.
