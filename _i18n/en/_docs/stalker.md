@@ -803,7 +803,7 @@ gum_exec_ctx_write_prolog_helper (GumExecCtx * ctx,
     // not be modified. If however, we make a call out, then we want the stalker
     // end user to have visibility of the full register set and to be able to 
     // make any modifications they see fit to them.
-    gum_arm64_writer_put_push_reg_reg (cw, ARM64_REG_X18, STALKER_REG_CTX);
+    gum_arm64_writer_put_push_reg_reg (cw, ARM64_REG_X18, ARM64_REG_X30);
     gum_arm64_writer_put_push_reg_reg (cw, ARM64_REG_X16, ARM64_REG_X17);
     gum_arm64_writer_put_push_reg_reg (cw, ARM64_REG_X14, ARM64_REG_X15);
     gum_arm64_writer_put_push_reg_reg (cw, ARM64_REG_X12, ARM64_REG_X13);
@@ -908,23 +908,14 @@ gum_exec_ctx_write_prolog_helper (GumExecCtx * ctx,
   gum_arm64_writer_put_push_reg_reg (cw, ARM64_REG_X14, ARM64_REG_X15);
   immediate_for_sp += 1 * 16;
 
-
-  /* save the stack pointer in context */
-  // Note that this uses the value updated in immediate_for_sp as we push
-  // items onto the stack.
-  gum_arm64_writer_put_ldr_reg_address (cw, STALKER_REG_CTX, GUM_ADDRESS (ctx));
-  gum_arm64_writer_put_add_reg_reg_imm (cw, ARM64_REG_X14, ARM64_REG_SP,
-      immediate_for_sp);
-  STALKER_STORE_REG_INTO_CTX (ARM64_REG_X14, app_stack);
-
-
   // We saved our LR into R19 on entry so that we could branch back to the 
-  // instrumented code once this helper has run. Although the instrumented code // called us, We restored LR to its previous value before the helper was 
-  // called. Although the LR is not callee-saved (e.g. it is not our 
-  // responsibility to save and restore it on return, but rather that of our 
-  // caller), it is done here to minimize the code size of the inline stub
-  // in the instrumented code.
-  gum_arm64_writer_put_br_reg (cw, ARM64_REG_X19);
+  // instrumented code once this helper has run. Although the instrumented code 
+  // called us, We restored LR to its previous value before the helper was 
+  // called (the app code). Although the LR is not callee-saved (e.g. it is 
+  // not our responsibility to save and restore it on return, but rather that
+  // of our caller), it is done here to minimize the code size of the inline
+  // stub in the instrumented block.
+  gum_arm64_writer_put_br_reg_no_auth (cw, ARM64_REG_X19);
 }
 ```
 
