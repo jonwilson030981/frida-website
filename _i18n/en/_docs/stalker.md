@@ -1241,32 +1241,40 @@ static guint total_transitions = 0;
   }
 #define GUM_PRINT_ENTRYGATE_COUNTER(name) \
   g_printerr ("\t" G_STRINGIFY (name) "s: %u\n", total_##name##s)
+  
 ```
+These counters can be displayed by the following routine. They appear to only be used by the unit testing framework rather than being exposed to the user through the API.
 
-static gboolean counters_enabled = FALSE;
-static guint total_transitions = 0;
-
-#define GUM_ENTRYGATE(name) \
-  gum_exec_ctx_replace_current_block_from_##name
-#define GUM_DEFINE_ENTRYGATE(name) \
-  static guint total_##name##s = 0; \
-  \
-  static gpointer GUM_THUNK \
-  GUM_ENTRYGATE (name) ( \
-      GumExecCtx * ctx, \
-      gpointer start_address) \
-  { \
-    if (counters_enabled) \
-      total_##name##s++; \
-    \
-    return gum_exec_ctx_replace_current_block_with (ctx, start_address); \
-  }
+```
 #define GUM_PRINT_ENTRYGATE_COUNTER(name) \
   g_printerr ("\t" G_STRINGIFY (name) "s: %u\n", total_##name##s)
+  
+void
+gum_stalker_dump_counters (void)
+{
+  g_printerr ("\n\ntotal_transitions: %u\n", total_transitions);
+
+  GUM_PRINT_ENTRYGATE_COUNTER (call_imm);
+  GUM_PRINT_ENTRYGATE_COUNTER (call_reg);
+  GUM_PRINT_ENTRYGATE_COUNTER (post_call_invoke);
+  GUM_PRINT_ENTRYGATE_COUNTER (excluded_call_imm);
+  GUM_PRINT_ENTRYGATE_COUNTER (excluded_call_reg);
+  GUM_PRINT_ENTRYGATE_COUNTER (ret);
+
+  GUM_PRINT_ENTRYGATE_COUNTER (jmp_imm);
+  GUM_PRINT_ENTRYGATE_COUNTER (jmp_reg);
+
+  GUM_PRINT_ENTRYGATE_COUNTER (jmp_cond_cc);
+  GUM_PRINT_ENTRYGATE_COUNTER (jmp_cond_cbz);
+  GUM_PRINT_ENTRYGATE_COUNTER (jmp_cond_cbnz);
+  GUM_PRINT_ENTRYGATE_COUNTER (jmp_cond_tbz);
+  GUM_PRINT_ENTRYGATE_COUNTER (jmp_cond_tbnz);
+
+  GUM_PRINT_ENTRYGATE_COUNTER (jmp_continuation);
+}
 ```
 
 # TODO
-
 
 ## Virtualize functions
 
@@ -1278,4 +1286,5 @@ write_X_event_code
 ## Miscelaneous
 ### Exclusive Store
 ### Pointer Authentication
+### Sysenter Virtualization
 
