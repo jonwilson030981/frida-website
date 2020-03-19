@@ -1215,11 +1215,13 @@ The first two we have already covered, these initialize the stalker engine and s
 
 We covered `gum_exec_ctx_obtain_block_for` previously in our section on transformers. It calls the transformed implementation in use, which by default calls `gum_stalker_iterator_next` which calls the relocator using `gum_arm64_relocator_read_one` to read the next relocated instruction. Then it calls `gum_stalker_iterator_keep` to generate the instrumented copy. It does this in a loop until `gum_stalker_iterator_next` returns false as it has reached the end of the block.
 
-Most of the time `gum_stalker_iterator_keep` will simply call `gum_arm64_relocator_write_one` to emit the relocated instruction as is. However, if the instruction is a branch or return instruction it will call `gum_exec_block_virtualize_branch_insn` or `gum_exec_block_virtualize_ret_insn` respectively.
+Most of the time `gum_stalker_iterator_keep` will simply call `gum_arm64_relocator_write_one` to emit the relocated instruction as is. However, if the instruction is a branch or return instruction it will call `gum_exec_block_virtualize_branch_insn` or `gum_exec_block_virtualize_ret_insn` respectively. These two virtualization functions which we will cover in more detail later, emit code to transfer control back into `gum_exec_ctx_replace_current_block_with` via an entry gate ready to process the next block (unless there is an optimization where we can bypass stalker and go direct to the next instrumented block, or we are entering into an excluded range).
+
+## Gates
+
 
 # TODO
 
-## Gates
 
 ## Virtualize functions
 
