@@ -1061,10 +1061,151 @@ gum_exec_ctx_write_epilog_helper (GumExecCtx * ctx,
 
 This is all quite complicated. Partly this is because we have only a single register to use as scratch space, partly because we want to keep the prologue and epilogue code stored inline in the instrumented block to a bare minimum, and partly because our context values can be changed by callouts and the like. But hopefully it all now makes sense.
 
-# TODO
-
 ## Reading/Writing Context
-load_real_register into
+Now we have our context saved, whether it was a full context, or just the minimal one, stalker may need to read registers from the context to see what state of the application code was. For example to find the address which a branch or return instruction was going to branch to so that we can instrument the block.
+
+When stalker writes the prologue and epilogue code, it does so by calling `gum_exec_block_open_prolog` and `gum_exec_block_close_prolog`. These store the type of prologue which has been written in `gc->opened_prolog`. 
+
+```
+static void
+gum_exec_block_open_prolog (GumExecBlock * block,
+                            GumPrologType type,
+                            GumGeneratorContext * gc)
+{
+  if (gc->opened_prolog >= type)
+    return;
+
+  /* We don't want to handle this case for performance reasons */
+  g_assert (gc->opened_prolog == GUM_PROLOG_NONE);
+
+  gc->opened_prolog = type;
+
+  gum_exec_ctx_write_prolog (block->ctx, type, gc->code_writer);
+}
+
+static void
+gum_exec_block_close_prolog (GumExecBlock * block,
+                             GumGeneratorContext * gc)
+{
+  if (gc->opened_prolog == GUM_PROLOG_NONE)
+    return;
+
+  gum_exec_ctx_write_epilog (block->ctx, gc->opened_prolog, gc->code_writer);
+  gc->opened_prolog = GUM_PROLOG_NONE;
+}
+```
+
+Therefore when we want to read a register, this can be achieved with the single function `gum_exec_ctx_load_real_register_into`. This determines which kind of prologue is in use and calls the relevant routine accordingly. Note that these routines don't actually read the registers, they emit code which reads them.
+
+```
+static void
+gum_exec_ctx_load_real_register_into (GumExecCtx * ctx,
+                                      arm64_reg target_register,
+                                      arm64_reg source_register,
+                                      GumGeneratorContext * gc)
+{
+  if (gc->opened_prolog == GUM_PROLOG_MINIMAL)
+  {
+    gum_exec_ctx_load_real_register_from_minimal_frame_into (ctx,
+        target_register, source_register, gc);
+    return;
+  }
+  else if (gc->opened_prolog == GUM_PROLOG_FULL)
+  {
+    gum_exec_ctx_load_real_register_from_full_frame_into (ctx, target_register,
+        source_register, gc);
+    return;
+  }
+
+  g_assert_not_reached ();
+}
+```
+Reading registers from the full frame is actually the simplest. We can see the code closely matches the structure used to pass the context to callouts etc. Remember that in each case register `x20` points to the base of the context structure.
+
+```
+typedef GumArm64CpuContext GumCpuContext;
+
+struct _GumArm64CpuContext
+{
+  guint64 pc;
+  guint64 sp;
+
+  guint64 x[29];
+  guint64 fp;
+  guint64 lr;
+  guint8 q[128];
+};
+
+static void
+gum_exec_ctx_load_real_register_from_full_frame_into (GumExecCtx * ctx,
+                                                      arm64_reg target_register,
+                                                      arm64_reg source_register,
+                                                      GumGeneratorContext * gc)
+{
+  GumArm64Writer * cw;
+
+  cw = gc->code_writer;
+
+  if (source_register >= ARM64_REG_X0 && source_register <= ARM64_REG_X28)
+  {
+    gum_arm64_writer_put_ldr_reg_reg_offset (cw, target_register, ARM64_REG_X20,
+        G_STRUCT_OFFSET (GumCpuContext, x) +
+        ((source_register - ARM64_REG_X0) * 8));
+  }
+  else if (source_register == ARM64_REG_X29)
+  {
+    gum_arm64_writer_put_ldr_reg_reg_offset (cw, target_register, ARM64_REG_X20,
+        G_STRUCT_OFFSET (GumCpuContext, fp));
+  }
+  else if (source_register == ARM64_REG_X30)
+  {
+    gum_arm64_writer_put_ldr_reg_reg_offset (cw, target_register, ARM64_REG_X20,
+        G_STRUCT_OFFSET (GumCpuContext, lr));
+  }
+  else
+  {
+    gum_arm64_writer_put_mov_reg_reg (cw, target_register, source_register);
+  }
+}
+```
+
+Reading from the minimal context is actually a little harder. `x0` through `x18` are simple, they are stored in the context block. After `x18` is 8 bytes padding (to make a total of 10 pairs of registers) followed by `x29` and `x30`. This makes a total of 11 pairs of registers. Immediately following this is the NEON/floating point registers (totallng 128 bytes). Finally `x19` and `x20`, are stored above this as they are restored by the inline epilogue code written by `gum_exec_ctx_write_epilog`.
+
+```
+static void
+gum_exec_ctx_load_real_register_from_minimal_frame_into (
+    GumExecCtx * ctx,
+    arm64_reg target_register,
+    arm64_reg source_register,
+    GumGeneratorContext * gc)
+{
+  GumArm64Writer * cw;
+
+  cw = gc->code_writer;
+
+  if (source_register >= ARM64_REG_X0 && source_register <= ARM64_REG_X18)
+  {
+    gum_arm64_writer_put_ldr_reg_reg_offset (cw, target_register, ARM64_REG_X20,
+        (source_register - ARM64_REG_X0) * 8);
+  }
+  else if (source_register == ARM64_REG_X19 || source_register == ARM64_REG_X20)
+  {
+    gum_arm64_writer_put_ldr_reg_reg_offset (cw, target_register, ARM64_REG_X20,
+        (11 * 16) + (4 * 32) + ((source_register - ARM64_REG_X19) * 8));
+  }
+  else if (source_register == ARM64_REG_X29 || source_register == ARM64_REG_X30)
+  {
+    gum_arm64_writer_put_ldr_reg_reg_offset (cw, target_register, ARM64_REG_X20,
+        (10 * 16) + ((source_register - ARM64_REG_X29) * 8));
+  }
+  else
+  {
+    gum_arm64_writer_put_mov_reg_reg (cw, target_register, source_register);
+  }
+}
+```
+
+# TODO
 
 ## Control flow
 Code which runs and code which writes code.
