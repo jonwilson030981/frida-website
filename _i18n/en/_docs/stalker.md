@@ -1213,6 +1213,10 @@ Execution of stalker begins at one of 3 entry points:
 
 The first two we have already covered, these initialize the stalker engine and start instrumenting the first block of execution. `gum_exec_ctx_replace_current_block_with` is used to instrument subsequent blocks. In fact, the main difference between this function and the preceeding two is that the stalker engine has already been initialized and hence this work doesn't need to be repeated. All three call `gum_exec_ctx_obtain_block_for` to generate the instrumented block.
 
+We covered `gum_exec_ctx_obtain_block_for` previously in our section on transformers. It calls the transformed implementation in use, which by default calls `gum_stalker_iterator_next` which calls the relocator using `gum_arm64_relocator_read_one` to read the next relocated instruction. Then it calls `gum_stalker_iterator_keep` to generate the instrumented copy. It does this in a loop until `gum_stalker_iterator_next` returns false as it has reached the end of the block.
+
+Most of the time `gum_stalker_iterator_keep` will simply call `gum_arm64_relocator_write_one` to emit the relocated instruction as is. However, if the instruction is a branch or return instruction it will call `gum_exec_block_virtualize_branch_insn` or `gum_exec_block_virtualize_ret_insn` respectively.
+
 # TODO
 
 ## Gates
