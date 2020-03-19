@@ -611,7 +611,64 @@ void last_stack_push_helper(gpointer x0, gpointer x1) {
 ```
 As we can see, this helper is actually a simple function which takes two arguments, the `real_address` and the `code_address` to store in the next `GumExecFrame` structure. Note that our stack is written backwards from the end of the page in which they are stored towards the start and that `current_frame` points to the last used entry (so our stack is full and descending). Also note we have a conditional check to see whether we are on the last entry (the one at the very beginning of the page will be page-aligned) and if we have run out of space for more entries (we have space for 512) then we simply do nothing. If we have space, we write the values from the parameters into the entry and retard the `current_frame` pointer to point to it.
 
+This helper is used when *virtualizing* branch instructions. Virtualizing is the name given to the replacement of an instruction typically those relating to branching with a series of instructions which instead of executing the intended block allow stalker to manage the control-flow. Recall as our transformer walks the instructions using the iterator and calls `iterator.keep()` we output our transformed instruction. When we encounter a branch (specifically) a call, we need to emit code to call back into the stalker engine so that it can instrument that block, but we also need to emit a call to the above helper to store the stack frame information. This information is used when emitting call events as well as later when optimizing the return.
+
 ### last_stack_pop_and_go
+
+Now lets look at the `last_stack_pop_and_go` helper. To understand this, we also need to understand the code written by  `gum_exec_block_write_ret_transfer_code` also (the code that calls it). We will skip over pointer authentication for now.
+
+```
+void ret_transfer_code(arm64_reg ret_reg) {
+  gpointer x16 = ret_reg
+  goto last_stack_pop_and_go_helper
+}
+
+void last_stack_pop_and_go_helper(gpointer x16) {
+  GumExecFrame **x0 = &ctx->current_frame
+  GumExecFrame* x1 = *x0
+  gpointer x17 = x0.real_address
+  if x17 == x16:
+    x17 = x0.code_address
+    x1++
+    *x0 = x1
+    goto x17
+  else:
+    x1 = ctx->first_frame
+    *x0 = x1
+    gpointer* x0 = &ctx->return_at
+    *x0=x16
+    last_prologue_minimal()
+    x0 = &ctx->return_at
+    x1 = *x0
+    gum_exec_ctx_replace_current_block_from_ret(ctx, x1)
+    last_epilogue_minimal()  
+}
+```
+
+So this code is a little harder. It isn't really a function and the actual assembly written it is muddied a little by the need to save and restore registers. But the essence of it is this. When virtualizing a return instruction this helper is used to optimize passing control back to the caller. ret_reg contains the address of the block to which we are intending to return.
+
+Lets take a look at the definition of the return instruction:
+```
+RET
+Return from subroutine, branches unconditionally to an address 
+in a register, with a hint that this is a subroutine return.
+
+RET  {Xn}
+Where:
+
+Xn
+Is the 64-bit name of the general-purpose register holding the 
+address to be branched to, in the range 0 to 31. Defaults to 
+X30 if absent.
+```
+
+As we can see, we are going to return to an address passed in a register. Typically, we can predict the register value and where we will return to, as the compiler will emit assembly code so that the register is set to the address of the instruction immediately following the call which got us there. As we instrument the block following a call instruction when we encounter the call, and we store the addresses of both the original block following the call and its instrumented copy in the `GumExecFrame` structure we can simply virtualize our return instruction by replacing it with instructions which simply branch to the instrumented block. We don't need to re-enter the stalker engine each time we see a return instruction and get a nice performance boost. Simple!
+
+However, remember that the user can use a custom transform to modify instructions as they see fit, they can insert instructions which modify register values, or perhaps a callout function which is passed the context structure which allows them to modify register values as they like. Now consider what if they modify the value in the return register!
+
+So we can see that the helper checks the value of the return register against the value of the `real_address` stored in the stack frame. If it matches, then all is well and we can simply branch directly to the already instrumented block. Otherwise, we follow a different path. First the array of `GumExecFrame` is cleared, now our control-flow has deviated, we will start again building our stack again. We accept that we will take this same slower path for any previous frames in the call-stack we recorded so far if we ever return to them, but will have the possibility of using the fast path for new calls we encounter from here on out (assuming that the return address isn't modified by stalker again).
+
+We make a minimal prologue (our instrumented code is now going to have to re-enter stalker) and we need to be able to restore the applications registers before we return control back to it. 
 
 
 ## Context
@@ -624,6 +681,8 @@ load_real_register into
 ## Control flow
 Code which runs and code which writes code.
 Different times of execution.
+
+## Gates
 
 ## Iterator
 next & keep
@@ -638,4 +697,5 @@ write_X_event_code
 
 ## Miscelaneous
 ### Exclusive Store
+### Pointer Authentication
 
