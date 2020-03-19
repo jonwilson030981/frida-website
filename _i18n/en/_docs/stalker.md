@@ -528,6 +528,7 @@ Lastly, if stalker is configured to, `gum_exec_ctx_obtain_block_for` will genera
 Reference functions involved in checking helpers are reachable above.
 
 ## Helpers
+We can see from the function `gum_exec_ctx_ensure_inline_helpers_reachable` that we have a total of 6 helpers. These helpers are common fragments of code which are needed repeatedly by our instrumented blocks. Rather than emitting the code they contain repeatedly, we instead write it once and place a call or branch instruction to have our instrumented code execute it. Recall that the helpers are written into the same slabs we are writing our instrumented code into and that if possible we can re-use the helper written into a previous nearby slab rather than putting a copy in each one.
 ```
 static void
 gum_exec_ctx_ensure_inline_helpers_reachable (GumExecCtx * ctx)
@@ -548,7 +549,70 @@ gum_exec_ctx_ensure_inline_helpers_reachable (GumExecCtx * ctx)
       gum_exec_ctx_write_stack_pop_and_go_helper);
 }
 ```
-Write pseudo code for helpers
+
+So, what are our 6 helpers. We have 2 for writing prologues which store register context, one for a fully context and one for a minimal context. We also have 2 for their corresponding epilogues for restoring the registers. The other two, the `last_stack_push` and `last_stack_pop_and_go` are used when instrumenting call instructions.
+
+Before we analyze these in detail, we first need to understand the frame structures. We can see from the code snippets below that we allocate a page to contain `GumExecFrame` structures. These structures are stored sequentially in the page like an array and are populated starting with the entry at the end of the page. Each frame contains the address of the original block and the address of the instrumented block which we generated to replace it:
+
+```
+typedef struct _GumExecFrame GumExecFrame;
+typedef struct _GumExecCtx GumExecCtx;
+
+struct _GumExecFrame
+{
+  gpointer real_address;
+  gpointer code_address;
+};
+
+struct _GumExecCtx
+{
+  ...
+  GumExecFrame * current_frame;
+  GumExecFrame * first_frame;
+  GumExecFrame * frames;
+  ...
+};
+
+static GumExecCtx *
+gum_stalker_create_exec_ctx (GumStalker * self,
+                             GumThreadId thread_id,
+                             GumStalkerTransformer * transformer,
+                             GumEventSink * sink)
+{
+  ...
+
+  ctx->frames =
+      gum_memory_allocate (NULL, self->page_size, self->page_size, GUM_PAGE_RW);
+  ctx->first_frame = (GumExecFrame *) ((guint8 *) ctx->frames +
+      self->page_size - sizeof (GumExecFrame));
+  ctx->current_frame = ctx->first_frame;
+
+  ...
+
+  return ctx;
+}
+```
+
+### last_stack_push
+The pseudo code for this helper is shown below:
+
+```
+void last_stack_push_helper(gpointer x0, gpointer x1) {
+  GumExecFrame **x16 = &ctx->current_frame
+  GumExecFrame* x17 = *x16
+  void* x2 = x17 & (ctx->stalker->page_size - 1)
+  if x2 != 0:
+    x17--
+    x17.real_address = x0
+    x17.code_address = x1
+    *x16 = x17
+  return
+}
+```
+As we can see, this helper is actually a simple function which takes two arguments, the `real_address` and the `code_address` to store in the next `GumExecFrame` structure. Note that our stack is written backwards from the end of the page in which they are stored towards the start and that `current_frame` points to the last used entry (so our stack is full and descending). Also note we have a conditional check to see whether we are on the last entry (the one at the very beginning of the page will be page-aligned) and if we have run out of space for more entries (we have space for 512) then we simply do nothing. If we have space, we write the values from the parameters into the entry and retard the `current_frame` pointer to point to it.
+
+### last_stack_pop_and_go
+
 
 ## Context
 write minimal/full prolog and epilog helpers
@@ -571,4 +635,7 @@ call to virtualize instructions
 write_X_event_code
 
 ## Unfollow and tidy up
+
+## Miscelaneous
+### Exclusive Store
 
