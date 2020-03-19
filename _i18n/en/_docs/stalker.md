@@ -919,12 +919,149 @@ gum_exec_ctx_write_prolog_helper (GumExecCtx * ctx,
 }
 ```
 
+Now let's look at the epilogue:
+```
+static void
+gum_exec_ctx_write_epilog_helper (GumExecCtx * ctx,
+                                  GumPrologType type,
+                                  GumArm64Writer * cw)
+{
+  // this instruction is used to restore the value of x15 back into
+  // the ALU flags.
+  const guint32 msr_nzcv_x15 = 0xd51b420f;
+
+
+  /* padding + status */
+  // Note that we don't restore the flags yet, since we must wait until
+  // we have finished all operations (e.g. additions, subtractions etc)
+  // which may modify the flags. However, we must do so before we
+  // restore X15 back to its original value.
+  gum_arm64_writer_put_pop_reg_reg (cw, ARM64_REG_X14, ARM64_REG_X15);
+
+
+  if (type == GUM_PROLOG_MINIMAL)
+  {
+    // Save the LR in X19 so we can return back to our caller in the
+    // instrumented block. Note that we must restore the link register X30 back
+    // to its original value (the block in the app code) before we return. 
+    // This is carried out below. Recall our value of X19 is saved to the 
+    // stack by the inline prolog itself and restored by the inline prolog 
+    // to which we are returning. So we can continue to use it as scratch space
+    // here.
+    gum_arm64_writer_put_mov_reg_reg (cw, ARM64_REG_X19, ARM64_REG_LR);
+
+
+    /* restore status */
+    // We have completed all of our instructions which may alter the flags
+    gum_arm64_writer_put_instruction (cw, msr_nzcv_x15);
+
+
+    // Restore all of the registers we saved in the context. We pushed the
+    // ARM64_REG_X30 earlier as padding, but we will pop it back there
+    // before we pop the actual pushed value of x30 immediately after
+    gum_arm64_writer_put_pop_reg_reg (cw, ARM64_REG_X0, ARM64_REG_X1);
+    gum_arm64_writer_put_pop_reg_reg (cw, ARM64_REG_X2, ARM64_REG_X3);
+    gum_arm64_writer_put_pop_reg_reg (cw, ARM64_REG_X4, ARM64_REG_X5);
+    gum_arm64_writer_put_pop_reg_reg (cw, ARM64_REG_X6, ARM64_REG_X7);
+    gum_arm64_writer_put_pop_reg_reg (cw, ARM64_REG_X8, ARM64_REG_X9);
+    gum_arm64_writer_put_pop_reg_reg (cw, ARM64_REG_X10, ARM64_REG_X11);
+    gum_arm64_writer_put_pop_reg_reg (cw, ARM64_REG_X12, ARM64_REG_X13);
+    gum_arm64_writer_put_pop_reg_reg (cw, ARM64_REG_X14, ARM64_REG_X15);
+    gum_arm64_writer_put_pop_reg_reg (cw, ARM64_REG_X16, ARM64_REG_X17);
+    gum_arm64_writer_put_pop_reg_reg (cw, ARM64_REG_X18, ARM64_REG_X30);
+    gum_arm64_writer_put_pop_reg_reg (cw, ARM64_REG_X29, ARM64_REG_X30);
+
+
+    gum_arm64_writer_put_pop_reg_reg (cw, ARM64_REG_Q0, ARM64_REG_Q1);
+    gum_arm64_writer_put_pop_reg_reg (cw, ARM64_REG_Q2, ARM64_REG_Q3);
+    gum_arm64_writer_put_pop_reg_reg (cw, ARM64_REG_Q4, ARM64_REG_Q5);
+    gum_arm64_writer_put_pop_reg_reg (cw, ARM64_REG_Q6, ARM64_REG_Q7);
+  }
+  else if (type == GUM_PROLOG_FULL)
+  {
+    /* GumCpuContext.pc + sp */
+    // We stored the stack pointer and PC in the stack, but we don't wan't to
+    // restore the PC back to the user code, and our stack pointer should be
+    // naturally restored as all of the data pushed onto it are popped back off
+    gum_arm64_writer_put_add_reg_reg_imm (cw, ARM64_REG_SP, ARM64_REG_SP, 16);
+
+
+    /* restore status */
+    // Again, we have finished any flag affecting operations now the above
+    // addition has been completed
+    gum_arm64_writer_put_instruction (cw, msr_nzcv_x15);
+
+
+    /* GumCpuContext.x[29] + fp + lr + padding */
+    gum_arm64_writer_put_pop_reg_reg (cw, ARM64_REG_X0, ARM64_REG_X1);
+    gum_arm64_writer_put_pop_reg_reg (cw, ARM64_REG_X2, ARM64_REG_X3);
+    gum_arm64_writer_put_pop_reg_reg (cw, ARM64_REG_X4, ARM64_REG_X5);
+    gum_arm64_writer_put_pop_reg_reg (cw, ARM64_REG_X6, ARM64_REG_X7);
+    gum_arm64_writer_put_pop_reg_reg (cw, ARM64_REG_X8, ARM64_REG_X9);
+    gum_arm64_writer_put_pop_reg_reg (cw, ARM64_REG_X10, ARM64_REG_X11);
+    gum_arm64_writer_put_pop_reg_reg (cw, ARM64_REG_X12, ARM64_REG_X13);
+    gum_arm64_writer_put_pop_reg_reg (cw, ARM64_REG_X14, ARM64_REG_X15);
+    gum_arm64_writer_put_pop_reg_reg (cw, ARM64_REG_X16, ARM64_REG_X17);
+    gum_arm64_writer_put_pop_reg_reg (cw, ARM64_REG_X18, ARM64_REG_X19);
+    gum_arm64_writer_put_pop_reg_reg (cw, ARM64_REG_X20, ARM64_REG_X21);
+
+
+    // Recall that X19 and X20 are actually restored by the epilog itself
+    // since X19 is used as scratch space during the prolog/epilog helpers
+    // and X20 is repurposed by the prolog as a pointer to the context
+    // structure. If we have a full prolog then this means that it was so that
+    // we could enter a callout which allows the stalker end user to inspect
+    // and modify all of the registers. This means that any changes to the 
+    // registers in the context structure above must be reflected at runtime.
+    // Thus since these values are restored from higher up the stack by the
+    // epilog, we must overwrite their values there with those from the context
+    // structure.
+    gum_arm64_writer_put_stp_reg_reg_reg_offset (cw, ARM64_REG_X19,
+        ARM64_REG_X20, ARM64_REG_SP, (5 * 16) + (4 * 32),
+        GUM_INDEX_SIGNED_OFFSET);
+
+
+    // Save the LR in X19 so we can return back to our caller in the
+    // instrumented code. Note that we must restore the link register X30 back
+    // to its original value before we return. This is carried out below.
+    // Recall our value of X19 is saved to the stack by the inline prolog
+    // itself and restored by the inline epilogue to which we are returning.
+    gum_arm64_writer_put_mov_reg_reg (cw, ARM64_REG_X19, ARM64_REG_LR);
+
+
+    gum_arm64_writer_put_pop_reg_reg (cw, ARM64_REG_X22, ARM64_REG_X23);
+    gum_arm64_writer_put_pop_reg_reg (cw, ARM64_REG_X24, ARM64_REG_X25);
+    gum_arm64_writer_put_pop_reg_reg (cw, ARM64_REG_X26, ARM64_REG_X27);
+    gum_arm64_writer_put_pop_reg_reg (cw, ARM64_REG_X28, ARM64_REG_X29);
+
+
+    // Recall that X15 was also pushed as padding alongside X30 when building
+    // the prolog. However, the stalker end user can modify the context and 
+    // hence the value of X15. However this would not effect the duplicate
+    // stashed here as padding and hence X15 would be clobbered. Therefore
+    // we copy the now restored value of X15 to the location where this copy
+    // was stored for padding before restoring both registers from the stack.
+    gum_arm64_writer_put_str_reg_reg_offset (cw, ARM64_REG_X15, ARM64_REG_SP,
+        8);
+    gum_arm64_writer_put_pop_reg_reg (cw, ARM64_REG_X30, ARM64_REG_X15);
+
+
+    /* GumCpuContext.q[128] */
+    gum_arm64_writer_put_pop_reg_reg (cw, ARM64_REG_Q0, ARM64_REG_Q1);
+    gum_arm64_writer_put_pop_reg_reg (cw, ARM64_REG_Q2, ARM64_REG_Q3);
+    gum_arm64_writer_put_pop_reg_reg (cw, ARM64_REG_Q4, ARM64_REG_Q5);
+    gum_arm64_writer_put_pop_reg_reg (cw, ARM64_REG_Q6, ARM64_REG_Q7);
+  }
+
+  // Now we can return back to to our caller (the inline part of the epilogue)
+  // with the LR still set to the original value of the app code.
+  gum_arm64_writer_put_br_reg_no_auth (cw, ARM64_REG_X19)
+}
+```
+
+This is all quite complicated. Partly this is because we have only a single register to use as scratch space, partly because we want to keep the prologue and epilogue code stored inline in the instrumented block to a bare minimum, and partly because our context values can be changed by callouts and the like. But hopefully it all now makes sense.
+
 # TODO
-Why restore the lr into x20? Is it used after? Or just a register to drop it into and excuse to get it into the stack for reading by the context building?
-
-write minimal/full prolog and epilog helpers
-write prolog/write epilog (writing to instrumented block)
-
 
 ## Reading/Writing Context
 load_real_register into
