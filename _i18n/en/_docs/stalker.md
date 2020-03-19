@@ -1205,17 +1205,17 @@ gum_exec_ctx_load_real_register_from_minimal_frame_into (
 }
 ```
 
+## Control flow
+Execution of stalker begins at one of 3 entry points:
+* `_gum_stalker_do_follow_me`
+* `gum_stalker_infect`
+* `gum_exec_ctx_replace_current_block_with`
+
+The first two we have already covered, these initialize the stalker engine and start instrumenting the first block of execution. `gum_exec_ctx_replace_current_block_with` is used to instrument subsequent blocks. In fact, the main difference between this function and the preceeding two is that the stalker engine has already been initialized and hence this work doesn't need to be repeated. All three call `gum_exec_ctx_obtain_block_for` to generate the instrumented block.
+
 # TODO
 
-## Control flow
-Code which runs and code which writes code.
-Different times of execution.
-
 ## Gates
-
-## Iterator
-next & keep
-call to virtualize instructions
 
 ## Virtualize functions
 
