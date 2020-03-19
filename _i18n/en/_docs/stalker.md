@@ -615,7 +615,7 @@ This helper is used when *virtualizing* branch instructions. Virtualizing is the
 
 ### last_stack_pop_and_go
 
-Now lets look at the `last_stack_pop_and_go` helper. To understand this, we also need to understand the code written by  `gum_exec_block_write_ret_transfer_code` also (the code that calls it). We will skip over pointer authentication for now.
+Now lets look at the `last_stack_pop_and_go` helper. To understand this, we also need to understand the code written by  `gum_exec_block_write_ret_transfer_code` also (the code that calls it) as well as that written by `gum_exec_block_write_exec_generated_code` which it calls. We will skip over pointer authentication for now.
 
 ```
 void ret_transfer_code(arm64_reg ret_reg) {
@@ -641,7 +641,15 @@ void last_stack_pop_and_go_helper(gpointer x16) {
     x0 = &ctx->return_at
     x1 = *x0
     gum_exec_ctx_replace_current_block_from_ret(ctx, x1)
-    last_epilogue_minimal()  
+    last_epilogue_minimal()
+    goto exec_generated_code
+    
+}
+
+void exec_generated_code() {
+  gpointer *x16 = &ctx->resume_at
+  gpointer x17 = *x16
+  goto x17
 }
 ```
 
@@ -668,7 +676,7 @@ However, remember that the user can use a custom transform to modify instruction
 
 So we can see that the helper checks the value of the return register against the value of the `real_address` stored in the stack frame. If it matches, then all is well and we can simply branch directly to the already instrumented block. Otherwise, we follow a different path. First the array of `GumExecFrame` is cleared, now our control-flow has deviated, we will start again building our stack again. We accept that we will take this same slower path for any previous frames in the call-stack we recorded so far if we ever return to them, but will have the possibility of using the fast path for new calls we encounter from here on out (assuming that the return address isn't modified by stalker again).
 
-We make a minimal prologue (our instrumented code is now going to have to re-enter stalker) and we need to be able to restore the applications registers before we return control back to it. 
+We make a minimal prologue (our instrumented code is now going to have to re-enter stalker) and we need to be able to restore the applications registers before we return control back to it. We call the entry gate for return, `gum_exec_ctx_replace_current_block_from_ret` (more on entry gates later). We then execute the corresponding epilogue before branching the the `ctx->resume_at` which is set by stalker during the above call to `gum_exec_ctx_replace_current_block_from_ret` to point to the new instrumented block.
 
 
 ## Context
