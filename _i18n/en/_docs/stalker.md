@@ -681,11 +681,63 @@ So we can see that the helper checks the value of the return register against th
 
 We make a minimal prologue (our instrumented code is now going to have to re-enter stalker) and we need to be able to restore the applications registers before we return control back to it. We call the entry gate for return, `gum_exec_ctx_replace_current_block_from_ret` (more on entry gates later). We then execute the corresponding epilogue before branching the the `ctx->resume_at` which is set by stalker during the above call to `gum_exec_ctx_replace_current_block_from_ret` to point to the new instrumented block.
 
-# TODO
-
 ## Context
+
+Let's look at the prologues and epilogues now.
+
+```c
+static void
+gum_exec_ctx_write_prolog (GumExecCtx * ctx,
+                           GumPrologType type,
+                           GumArm64Writer * cw)
+{
+  gpointer helper;
+
+  helper = (type == GUM_PROLOG_MINIMAL)
+      ? ctx->last_prolog_minimal
+      : ctx->last_prolog_full;
+
+  gum_arm64_writer_put_stp_reg_reg_reg_offset (cw, ARM64_REG_X19,
+      ARM64_REG_LR, ARM64_REG_SP, -(16 + GUM_RED_ZONE_SIZE),
+      GUM_INDEX_PRE_ADJUST);
+  gum_arm64_writer_put_bl_imm (cw, GUM_ADDRESS (helper));
+}
+
+static void
+gum_exec_ctx_write_epilog (GumExecCtx * ctx,
+                           GumPrologType type,
+                           GumArm64Writer * cw)
+{
+  gpointer helper;
+
+  helper = (type == GUM_PROLOG_MINIMAL)
+      ? ctx->last_epilog_minimal
+      : ctx->last_epilog_full;
+
+  gum_arm64_writer_put_bl_imm (cw, GUM_ADDRESS (helper));
+  gum_arm64_writer_put_ldp_reg_reg_reg_offset (cw, ARM64_REG_X19,
+      ARM64_REG_X20, ARM64_REG_SP, 16 + GUM_RED_ZONE_SIZE,
+      GUM_INDEX_POST_ADJUST);
+}
+```
+
+We can see that these do little other than call the corresponding prologue or epilogue helpers. We can see that the prologue will store `x19` and the link register onto the stack. These are then restored into `x19` and `x20` at the end of the epilogue.  This is because `x19` is needed as scratch space to write the context blocks and the link register needs to be preserved as it will be clobbered by the call to the helper.
+
+The LDP and STP instructions load and store a pair of registers respectively and have the option to increment or decrement the stack pointer. This increment or decrement can be carried out either before, or after the values are loaded or stored.
+
+Note also the offset at which these registers are placed. They are stored at `16` bytes + `GUM_RED_ZONE_SIZE` beyond the top of the stack. Note that our stack on AARCH64 is full and descending. This means that the stack grows toward lower addresses and the stack pointer points to the last item pushed (not to the next empty space). So, if we subtract 16 bytes from the stack pointer, then this gives us enough space to store the two 64bit registers. Note that the stack pointer must be decremented before the store (pre-decrement) and incremented after the load (post-increment).
+
+So what is `GUM_RED_ZONE_SIZE`? The [redzone](http://hungri-yeti.com/2015/10/19/the-arm64-aarch64-stack/) is a 128 byte area beyond the stack pointer which a function can use to store temporary variables. This allows a function to store data in the stack without the need to adjust the stack pointer all of the time. Note that this call to the prologue is likely the first thing to be carried out in our instrumented block, we don't know what local variables the application code has stored in the redzone and so we must ensure that we advance the stackpointer beyond it before we start using the stack to store information for the stalker engine.
+
+## Context Helpers
+
+
+# TODO
+Why restore the lr into x20? Is it used after? Or just a register to drop it into and excuse to get it into the stack for reading by the context building?
+
 write minimal/full prolog and epilog helpers
 write prolog/write epilog (writing to instrumented block)
+
 
 ## Reading/Writing Context
 load_real_register into
