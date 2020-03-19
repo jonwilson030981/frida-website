@@ -510,8 +510,9 @@ gum_exec_block_commit (GumExecBlock * block)
 Now let's just return to a few more details of the function `gum_exec_ctx_obtain_block_for`. First we should note that each block has a single instruction prefixed. 
 
 ```
-gum_arm64_writer_put_ldp_reg_reg_reg_offset (cw, ARM64_REG_X16, ARM64_REG_X17,
-      ARM64_REG_SP, 16 + GUM_RED_ZONE_SIZE, GUM_INDEX_POST_ADJUST);
+gum_arm64_writer_put_ldp_reg_reg_reg_offset (cw, ARM64_REG_X16, 
+  ARM64_REG_X17, ARM64_REG_SP, 16 + GUM_RED_ZONE_SIZE, 
+  GUM_INDEX_POST_ADJUST);
 ```
 This instruction is the restoration prolog (denoted by `GUM_RESTORATION_PROLOG_SIZE`). This skipped in normal usage (hence you will note this constant is added on by the functions `_gum_stalker_do_follow_me` and `gum_stalker_infect` when returning the address of the instrumented code. When return instructions are instrumented, however, if the return is to a block which has already been instrumented, then we can simply return to that block rather than returning back into the stalker engine. This requires a couple of registers to be used in the generated assembly to figure out though and this means they have to be stored on the stack (written by `gum_exec_block_write_ret_transfer_code`), in the event that we can return directly to an instrumented block, we return to this first instruction which restores these registers from the stack. This will be covered in more detail later.
 
@@ -524,11 +525,11 @@ This inserts a break instruction which is intended to simplify debugging.
 
 Lastly, if stalker is configured to, `gum_exec_ctx_obtain_block_for` will generate an event of type `GUM_COMPILE` when compiling the block.
 
-# TODO
-Reference functions involved in checking helpers are reachable above.
-
 ## Helpers
 We can see from the function `gum_exec_ctx_ensure_inline_helpers_reachable` that we have a total of 6 helpers. These helpers are common fragments of code which are needed repeatedly by our instrumented blocks. Rather than emitting the code they contain repeatedly, we instead write it once and place a call or branch instruction to have our instrumented code execute it. Recall that the helpers are written into the same slabs we are writing our instrumented code into and that if possible we can re-use the helper written into a previous nearby slab rather than putting a copy in each one.
+
+This function calls `gum_exec_ctx_ensure_helper_reachable` for each helper which in turn calls `gum_exec_ctx_is_helper_reachable` to check if the helper is within range, or otherwise calls the callback passed as the second argument to write out a new copy.
+
 ```
 static void
 gum_exec_ctx_ensure_inline_helpers_reachable (GumExecCtx * ctx)
@@ -550,9 +551,9 @@ gum_exec_ctx_ensure_inline_helpers_reachable (GumExecCtx * ctx)
 }
 ```
 
-So, what are our 6 helpers. We have 2 for writing prologues which store register context, one for a fully context and one for a minimal context. We also have 2 for their corresponding epilogues for restoring the registers. The other two, the `last_stack_push` and `last_stack_pop_and_go` are used when instrumenting call instructions.
+So, what are our 6 helpers. We have 2 for writing prologues which store register context, one for a fully context and one for a minimal context. We will cover these later. We also have 2 for their corresponding epilogues for restoring the registers. The other two, the `last_stack_push` and `last_stack_pop_and_go` are used when instrumenting call instructions.
 
-Before we analyze these in detail, we first need to understand the frame structures. We can see from the code snippets below that we allocate a page to contain `GumExecFrame` structures. These structures are stored sequentially in the page like an array and are populated starting with the entry at the end of the page. Each frame contains the address of the original block and the address of the instrumented block which we generated to replace it:
+Before we analyze these two in detail, we first need to understand the frame structures. We can see from the code snippets below that we allocate a page to contain `GumExecFrame` structures. These structures are stored sequentially in the page like an array and are populated starting with the entry at the end of the page. Each frame contains the address of the original block and the address of the instrumented block which we generated to replace it:
 
 ```
 typedef struct _GumExecFrame GumExecFrame;
@@ -594,6 +595,8 @@ gum_stalker_create_exec_ctx (GumStalker * self,
 ```
 
 ### last_stack_push
+Much of the complexity in understanding stalker and the helpers is particular is that some functions (let's call then writers) write code which is executed at a later point. These writers have branches in themsevles which determine exactly what code to write and the written can also sometime have branches too. The approach I will take for these two helpers therefore is to show pseudo code for the assembly which is emitted into the slab which will be called by instrumented blocks. 
+
 The pseudo code for this helper is shown below:
 
 ```
@@ -678,6 +681,7 @@ So we can see that the helper checks the value of the return register against th
 
 We make a minimal prologue (our instrumented code is now going to have to re-enter stalker) and we need to be able to restore the applications registers before we return control back to it. We call the entry gate for return, `gum_exec_ctx_replace_current_block_from_ret` (more on entry gates later). We then execute the corresponding epilogue before branching the the `ctx->resume_at` which is set by stalker during the above call to `gum_exec_ctx_replace_current_block_from_ret` to point to the new instrumented block.
 
+# TODO
 
 ## Context
 write minimal/full prolog and epilog helpers
