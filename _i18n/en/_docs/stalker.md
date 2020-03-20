@@ -391,7 +391,8 @@ gum_exec_ctx_add_slab (GumExecCtx * ctx)
   GumSlab * slab;
   GumStalker * stalker = ctx->stalker;
 
-  slab = gum_memory_allocate (NULL, stalker->slab_size, stalker->page_size,
+  slab = gum_memory_allocate (NULL, stalker->slab_size, 
+      stalker->page_size,
       stalker->is_rwx_supported ? GUM_PAGE_RWX : GUM_PAGE_RW);
 
   slab->data = (guint8 *) slab + stalker->slab_header_size;
@@ -505,7 +506,8 @@ gum_exec_block_commit (GumExecBlock * block)
   memcpy (block->real_snapshot, block->real_begin, real_size);
   block->slab->offset += real_size;
 
-  gum_stalker_freeze (block->ctx->stalker, block->code_begin, code_size);
+  gum_stalker_freeze (block->ctx->stalker, block->code_begin, 
+      code_size);
 }
 ```
 
@@ -536,19 +538,28 @@ This function calls `gum_exec_ctx_ensure_helper_reachable` for each helper which
 static void
 gum_exec_ctx_ensure_inline_helpers_reachable (GumExecCtx * ctx)
 {
-  gum_exec_ctx_ensure_helper_reachable (ctx, &ctx->last_prolog_minimal,
+  gum_exec_ctx_ensure_helper_reachable (ctx, 
+      &ctx->last_prolog_minimal,
       gum_exec_ctx_write_minimal_prolog_helper);
-  gum_exec_ctx_ensure_helper_reachable (ctx, &ctx->last_epilog_minimal,
+      
+  gum_exec_ctx_ensure_helper_reachable (ctx, 
+      &ctx->last_epilog_minimal,
       gum_exec_ctx_write_minimal_epilog_helper);
 
-  gum_exec_ctx_ensure_helper_reachable (ctx, &ctx->last_prolog_full,
+  gum_exec_ctx_ensure_helper_reachable (ctx, 
+      &ctx->last_prolog_full,
       gum_exec_ctx_write_full_prolog_helper);
-  gum_exec_ctx_ensure_helper_reachable (ctx, &ctx->last_epilog_full,
+      
+  gum_exec_ctx_ensure_helper_reachable (ctx, 
+      &ctx->last_epilog_full,
       gum_exec_ctx_write_full_epilog_helper);
 
-  gum_exec_ctx_ensure_helper_reachable (ctx, &ctx->last_stack_push,
+  gum_exec_ctx_ensure_helper_reachable (ctx,
+      &ctx->last_stack_push,
       gum_exec_ctx_write_stack_push_helper);
-  gum_exec_ctx_ensure_helper_reachable (ctx, &ctx->last_stack_pop_and_go,
+      
+  gum_exec_ctx_ensure_helper_reachable (ctx,
+      &ctx->last_stack_pop_and_go,
       gum_exec_ctx_write_stack_pop_and_go_helper);
 }
 ```
@@ -584,8 +595,8 @@ gum_stalker_create_exec_ctx (GumStalker * self,
 {
   ...
 
-  ctx->frames =
-      gum_memory_allocate (NULL, self->page_size, self->page_size, GUM_PAGE_RW);
+  ctx->frames = gum_memory_allocate (
+      NULL, self->page_size, self->page_size, GUM_PAGE_RW);
   ctx->first_frame = (GumExecFrame *) ((guint8 *) ctx->frames +
       self->page_size - sizeof (GumExecFrame));
   ctx->current_frame = ctx->first_frame;
