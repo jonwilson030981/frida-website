@@ -1460,6 +1460,57 @@ gum_exec_ctx_replace_current_block_with (GumExecCtx * ctx,
 }
 ```
 
+Let's look at `gum_stalker_unfollow` now:
+
+```
+void
+gum_stalker_unfollow (GumStalker * self,
+                      GumThreadId thread_id)
+{
+  if (thread_id == gum_process_get_current_thread_id ())
+  {
+    gum_stalker_unfollow_me (self);
+  }
+  else
+  {
+    GSList * cur;
+
+    GUM_STALKER_LOCK (self);
+
+    for (cur = self->contexts; cur != NULL; cur = cur->next)
+    {
+      GumExecCtx * ctx = (GumExecCtx *) cur->data;
+
+      if (ctx->thread_id == thread_id &&
+          g_atomic_int_compare_and_exchange (&ctx->state, GUM_EXEC_CTX_ACTIVE,
+              GUM_EXEC_CTX_UNFOLLOW_PENDING))
+      {
+        GUM_STALKER_UNLOCK (self);
+
+        if (!gum_exec_ctx_has_executed (ctx))
+        {
+          GumDisinfectContext dc;
+
+          dc.exec_ctx = ctx;
+          dc.success = FALSE;
+
+          gum_process_modify_thread (thread_id, gum_stalker_disinfect, &dc);
+
+          if (dc.success)
+            gum_stalker_destroy_exec_ctx (self, ctx);
+        }
+
+        return;
+      }
+    }
+
+    GUM_STALKER_UNLOCK (self);
+  }
+}
+```
+
+This function looks through the list of contexts looking for the one for the requested thread. Again, it sets the state of the context to `GUM_EXEC_CTX_UNFOLLOW_PENDING`. If the thread has already run, we must wait for it to check this flag and return to normal execution. However, if it has not run (perhaps it was in a blocking syscall when we asked to follow it and never got infected in the first instance) then we can *disinfect* it ourselves by calling `gum_process_modify_thread` to modify the thread context (this function was described in detail earlier) and using `gum_stalker_disinfect` as our callback to perform the changes. This simply checks to see if the program counter was set to point to the `infect_thunk` and resets the program pointer back to its original value.
+
 ## Miscelaneous
 ### Exclusive Store
 ### Pointer Authentication
