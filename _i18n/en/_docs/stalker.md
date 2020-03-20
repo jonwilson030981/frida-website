@@ -1207,7 +1207,9 @@ gum_exec_block_close_prolog (GumExecBlock * block,
   if (gc->opened_prolog == GUM_PROLOG_NONE)
     return;
 
-  gum_exec_ctx_write_epilog (block->ctx, gc->opened_prolog, gc->code_writer);
+  gum_exec_ctx_write_epilog (block->ctx, gc->opened_prolog, 
+      gc->code_writer);
+      
   gc->opened_prolog = GUM_PROLOG_NONE;
 }
 ```
@@ -1229,8 +1231,8 @@ gum_exec_ctx_load_real_register_into (GumExecCtx * ctx,
   }
   else if (gc->opened_prolog == GUM_PROLOG_FULL)
   {
-    gum_exec_ctx_load_real_register_from_full_frame_into (ctx, target_register,
-        source_register, gc);
+    gum_exec_ctx_load_real_register_from_full_frame_into (ctx,
+        target_register, source_register, gc);
     return;
   }
 
@@ -1254,34 +1256,40 @@ struct _GumArm64CpuContext
 };
 
 static void
-gum_exec_ctx_load_real_register_from_full_frame_into (GumExecCtx * ctx,
-                                                      arm64_reg target_register,
-                                                      arm64_reg source_register,
-                                                      GumGeneratorContext * gc)
+gum_exec_ctx_load_real_register_from_full_frame_into (
+    GumExecCtx * ctx, 
+    arm64_reg target_register,
+    arm64_reg source_register,
+    GumGeneratorContext * gc)
 {
   GumArm64Writer * cw;
 
   cw = gc->code_writer;
 
-  if (source_register >= ARM64_REG_X0 && source_register <= ARM64_REG_X28)
+  if (source_register >= ARM64_REG_X0 && 
+      source_register <= ARM64_REG_X28)
   {
-    gum_arm64_writer_put_ldr_reg_reg_offset (cw, target_register, ARM64_REG_X20,
+    gum_arm64_writer_put_ldr_reg_reg_offset (cw, 
+        target_register, ARM64_REG_X20,
         G_STRUCT_OFFSET (GumCpuContext, x) +
         ((source_register - ARM64_REG_X0) * 8));
   }
   else if (source_register == ARM64_REG_X29)
   {
-    gum_arm64_writer_put_ldr_reg_reg_offset (cw, target_register, ARM64_REG_X20,
+    gum_arm64_writer_put_ldr_reg_reg_offset (cw, 
+        target_register, ARM64_REG_X20,
         G_STRUCT_OFFSET (GumCpuContext, fp));
   }
   else if (source_register == ARM64_REG_X30)
   {
-    gum_arm64_writer_put_ldr_reg_reg_offset (cw, target_register, ARM64_REG_X20,
+    gum_arm64_writer_put_ldr_reg_reg_offset (cw,
+        target_register, ARM64_REG_X20,
         G_STRUCT_OFFSET (GumCpuContext, lr));
   }
   else
   {
-    gum_arm64_writer_put_mov_reg_reg (cw, target_register, source_register);
+    gum_arm64_writer_put_mov_reg_reg (cw, 
+        target_register, source_register);
   }
 }
 ```
@@ -1300,24 +1308,31 @@ gum_exec_ctx_load_real_register_from_minimal_frame_into (
 
   cw = gc->code_writer;
 
-  if (source_register >= ARM64_REG_X0 && source_register <= ARM64_REG_X18)
+  if (source_register >= ARM64_REG_X0 && 
+      source_register <= ARM64_REG_X18)
   {
-    gum_arm64_writer_put_ldr_reg_reg_offset (cw, target_register, ARM64_REG_X20,
+    gum_arm64_writer_put_ldr_reg_reg_offset (cw, 
+        target_register, ARM64_REG_X20,
         (source_register - ARM64_REG_X0) * 8);
   }
-  else if (source_register == ARM64_REG_X19 || source_register == ARM64_REG_X20)
+  else if (source_register == ARM64_REG_X19 || 
+      source_register == ARM64_REG_X20)
   {
-    gum_arm64_writer_put_ldr_reg_reg_offset (cw, target_register, ARM64_REG_X20,
+    gum_arm64_writer_put_ldr_reg_reg_offset (cw, 
+        target_register, ARM64_REG_X20,
         (11 * 16) + (4 * 32) + ((source_register - ARM64_REG_X19) * 8));
   }
-  else if (source_register == ARM64_REG_X29 || source_register == ARM64_REG_X30)
+  else if (source_register == ARM64_REG_X29 || 
+      source_register == ARM64_REG_X30)
   {
-    gum_arm64_writer_put_ldr_reg_reg_offset (cw, target_register, ARM64_REG_X20,
+    gum_arm64_writer_put_ldr_reg_reg_offset (cw,
+        target_register, ARM64_REG_X20,
         (10 * 16) + ((source_register - ARM64_REG_X29) * 8));
   }
   else
   {
-    gum_arm64_writer_put_mov_reg_reg (cw, target_register, source_register);
+    gum_arm64_writer_put_mov_reg_reg (cw, 
+        target_register, source_register);
   }
 }
 ```
@@ -1354,7 +1369,8 @@ static guint total_transitions = 0;
     if (counters_enabled) \
       total_##name##s++; \
     \
-    return gum_exec_ctx_replace_current_block_with (ctx, start_address); \
+    return gum_exec_ctx_replace_current_block_with (ctx, \
+        start_address); \
   }
 #define GUM_PRINT_ENTRYGATE_COUNTER(name) \
   g_printerr ("\t" G_STRINGIFY (name) "s: %u\n", total_##name##s)
