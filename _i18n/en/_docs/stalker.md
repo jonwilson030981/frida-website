@@ -1321,8 +1321,74 @@ Events are one of the key outputs of the stalker engine. They are emitted by the
 * `gum_exec_ctx_emit_exec_event`
 * `gum_exec_ctx_emit_block_event`
 
-## Unfollow and tidy up
+One thing to note with each of these functions, however, is that they all call `gum_exec_block_write_unfollow_check_code` to generate code for checking if stalker is to stop following the thread. We'll have a look at this in more detail next.
 
+## Unfollow and tidy up
+If we look at the function which generates the instrumented code to check if we are being unfollowed, we can see it cause the thread to call `gum_exec_ctx_maybe_unfollow` passing the address of the original 
+```
+static void
+gum_exec_block_write_unfollow_check_code (GumExecBlock * block,
+                                          GumGeneratorContext * gc,
+                                          GumCodeContext cc)
+{
+  GumExecCtx * ctx = block->ctx;
+  GumArm64Writer * cw = gc->code_writer;
+  gconstpointer beach = cw->code + 1;
+  GumPrologType opened_prolog;
+
+  if (cc != GUM_CODE_INTERRUPTIBLE)
+    return;
+
+  gum_arm64_writer_put_call_address_with_arguments (cw,
+      GUM_ADDRESS (gum_exec_ctx_maybe_unfollow), 2,
+      GUM_ARG_ADDRESS, GUM_ADDRESS (ctx),
+      GUM_ARG_ADDRESS, GUM_ADDRESS (gc->instruction->begin));
+  gum_arm64_writer_put_cbz_reg_label (cw, ARM64_REG_X0, beach);
+
+  opened_prolog = gc->opened_prolog;
+  gum_exec_block_close_prolog (block, gc);
+  gc->opened_prolog = opened_prolog;
+
+  gum_arm64_writer_put_ldr_reg_address (cw, ARM64_REG_X16,
+      GUM_ADDRESS (&ctx->resume_at));
+  gum_arm64_writer_put_ldr_reg_reg_offset (cw, ARM64_REG_X17, ARM64_REG_X16,
+      0);
+  gum_arm64_writer_put_br_reg_no_auth (cw, ARM64_REG_X17);
+
+  gum_arm64_writer_put_label (cw, beach);
+}
+```
+
+```
+static gboolean
+gum_exec_ctx_maybe_unfollow (GumExecCtx * ctx,
+                             gpointer resume_at)
+{
+  if (g_atomic_int_get (&ctx->state) != GUM_EXEC_CTX_UNFOLLOW_PENDING)
+    return FALSE;
+
+  if (ctx->pending_calls > 0)
+    return FALSE;
+
+  gum_exec_ctx_unfollow (ctx, resume_at);
+
+  return TRUE;
+}
+
+static void
+gum_exec_ctx_unfollow (GumExecCtx * ctx,
+                       gpointer resume_at)
+{
+  ctx->current_block = NULL;
+
+  ctx->resume_at = resume_at;
+
+  gum_tls_key_set_value (ctx->stalker->exec_ctx, NULL);
+
+  ctx->destroy_pending_since = g_get_monotonic_time ();
+  g_atomic_int_set (&ctx->state, GUM_EXEC_CTX_DESTROY_PENDING);
+}
+```
 ## Miscelaneous
 ### Exclusive Store
 ### Pointer Authentication
