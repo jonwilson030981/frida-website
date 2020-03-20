@@ -1649,7 +1649,35 @@ label:
 ```
 
 ### Sysenter Virtualization
+Syscall virtualization is carried out by the following routine. We can see we only do anything on Linux systems:
+```
+static GumVirtualizationRequirements
+gum_exec_block_virtualize_sysenter_insn (GumExecBlock * block,
+                                         GumGeneratorContext * gc)
+{
+#ifdef HAVE_LINUX
+  return gum_exec_block_virtualize_linux_sysenter (block, gc);
+#else
+  return GUM_REQUIRE_RELOCATION;
+#endif
+}
+```
 
+This is required because of the `clone` syscall. This syscall creates a new process which shares execution context with the parent, such as file handles, virtual address space, and signal handlers. In essence, this effectively creates a new thread. But the current thread is being traced by stalker, and clone is going to create an exact replica of it. Given that stalker contexts are on a per-thread basis, we should not be stalking this new child.
+
+Note that for syscalls in AARCH64 the first 8 arguments are passed in registers `x0` through `x7` and the syscall number is passed in `x8`, additional arguments are passed on the stack. The return value for the syscall is returned in `x0`. The function `gum_exec_block_virtualize_linux_sysenter` generates the necessary instrumented assembly to deal with such a syscall. We will look at the pseudo code below:
+
+```
+if x8 == __NR_clone:
+  return do_original_syscall()
+else:
+  x0 = do_original_syscall()
+  if x0 == 0:
+    goto gc->instruction->begin
+  return x0  
+```
+
+We can see that it first checks if we are dealing with a `clone` syscall, otherwise it simply performs the original syscall and that is all (the original syscall instruction is copied from the original block). Otherwise if it is a clone syscall, then we again perform the original syscall. At this point, we have two threads of execution, the syscall determines that each thread will [return a different value](http://man7.org/linux/man-pages/man2/clone.2.html).
 
 ### Pointer Authentication
 
