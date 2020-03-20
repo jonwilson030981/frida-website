@@ -1590,7 +1590,18 @@ Here, we can see that the iterator records when it sees an exclusive load and tr
   }
 ```
 ### Exhausted Blocks
+Whilst we check to ensure a minimum amount of space for our current instrumented block is left in the slab before we start (and allocate a new one if we fall below this minimum), we cannot predict how long a sequence of instructions we are likely to encounter in our input block. Nor is it simple to detemine exactly how many instructions in output we will need to write the necessary instrumentation (we have possible code for emitting the different types of event, checking for excluded ranges, virtualizing instructions found at the end of the block etc). Also, trying to allow for the instrumented code to be non-sequential is fraught with difficulty. So the approach taken is to ensure that each time we read a new instruction from the interator there is at least 1024 bytes of space in the slab for our output. If it is not, then we 
 ```
+#define GUM_EXEC_BLOCK_MIN_SIZE 1024
+
+static gboolean
+gum_exec_block_is_full (GumExecBlock * block)
+{
+  guint8 * slab_end = block->slab->data + block->slab->size;
+
+  return slab_end - block->code_end < GUM_EXEC_BLOCK_MIN_SIZE;
+}
+
 gboolean
 gum_stalker_iterator_next (GumStalkerIterator * self,
                            const cs_insn ** insn)
