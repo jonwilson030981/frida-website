@@ -1314,7 +1314,12 @@ After looking at the virtualization of call instructions, you will be pleased to
 
 
 ## Emitting events
-write_X_event_code
+Events are one of the key outputs of the stalker engine. They are emitted by the following functions. Their implementation again is quite self-explanatory:
+
+* `gum_exec_ctx_emit_call_event`
+* `gum_exec_ctx_emit_ret_event`
+* `gum_exec_ctx_emit_exec_event`
+* `gum_exec_ctx_emit_block_event`
 
 ## Unfollow and tidy up
 
