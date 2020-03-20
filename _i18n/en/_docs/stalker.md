@@ -751,39 +751,45 @@ gum_exec_ctx_write_prolog_helper (GumExecCtx * ctx,
                                   GumPrologType type,
                                   GumArm64Writer * cw)
 {
-  // Keep track of how much we are pushing onto the stack since we will want
-  // to store in the exec context where the original app stack was. At present
-  // the call to our helper already skipped the red zone and stored LR and X19.
+  // Keep track of how much we are pushing onto the stack since we 
+  // will want to store in the exec context where the original app 
+  // stack was. At present the call to our helper already skipped 
+  // the red zone and stored LR and X19.
   gint immediate_for_sp = 16 + GUM_RED_ZONE_SIZE;
   
   // This insruction is used to store the flags into x15.
   const guint32 mrs_x15_nzcv = 0xd53b420f;
 
 
-  // Note that only the full prolog has to look like the C struct definition,
-  // since this is the data structure passed to callouts and the like.
+  // Note that only the full prolog has to look like the C struct 
+  // definition, since this is the data structure passed to 
+  // callouts and the like.
 
 
-  // Save Return address to our instrumented block in X19. We will preserve
-  // this throughout and branch back there at the end. This will take us back
-  // to the code written by gum_exec_ctx_write_prolog
+  // Save Return address to our instrumented block in X19. We will
+  // preserve this throughout and branch back there at the end. 
+  // This will take us back to the code written by 
+  // gum_exec_ctx_write_prolog
   gum_arm64_writer_put_mov_reg_reg (cw, ARM64_REG_X19, ARM64_REG_LR);
 
 
-  // LR = SP[8] Save return address of previous block (or user-code) in LR
-  // This was pushed there by the code written by gum_exec_ctx_write_prolog.
-  // This is the one which will remain in LR once we have returned to our
-  // instrumented code block. Note the use of SP+8 is a little asymmetric
-  // on entry (prolog) is it used to pass LR. One exit (epilog) it is used
-  // to pass x20 accordingly gum_exec_ctx_write_epilog restores it there.
-  gum_arm64_writer_put_ldr_reg_reg_offset (cw, ARM64_REG_LR, ARM64_REG_SP, 8);
+  // LR = SP[8] Save return address of previous block (or user-code)
+  // in LR. This was pushed there by the code written by 
+  // gum_exec_ctx_write_prolog. This is the one which will remain in 
+  // LR once we have returned to our instrumented code block. Note 
+  // the use of SP+8 is a little asymmetric on entry (prolog) is it 
+  // used to pass LR. One exit (epilog) it is used to pass x20 
+  // accordingly gum_exec_ctx_write_epilog restores it there.
+  gum_arm64_writer_put_ldr_reg_reg_offset (cw, 
+      ARM64_REG_LR, ARM64_REG_SP, 8);
 
 
-  // Store SP[8] = X20. We have read the value of LR which was put there by 
-  // gum_exec_ctx_write_prolog and are writing x20 there so that it can be 
-  // restored by code written by gum_exec_ctx_write_epilog
-  gum_arm64_writer_put_str_reg_reg_offset (cw, ARM64_REG_X20, ARM64_REG_SP,
-      8);
+  // Store SP[8] = X20. We have read the value of LR which was put 
+  // there by  gum_exec_ctx_write_prolog and are writing x20 there 
+  // so that it can be  restored by code written by 
+  // gum_exec_ctx_write_epilog
+  gum_arm64_writer_put_str_reg_reg_offset (cw, 
+      ARM64_REG_X20, ARM64_REG_SP, 8);
 
 
   if (type == GUM_PROLOG_MINIMAL)
