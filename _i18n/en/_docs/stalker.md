@@ -1296,7 +1296,7 @@ is_false:
   jmp_transfer_code(cond_target, cond_entry_func)
 ```
 
-Here, we can see that we first write a branch instruction into our instrumented block, as in our instrumented block, we also need to determine whether we should take the branch or not. But instead of branching directly to the target, just like for the non-conditional branches we use `gum_exec_block_write_jmp_transfer_code` to write code to jump back into stalker via the relevant entry gate passing the real address we would have branched to.
+Here, we can see that we first write a branch instruction into our instrumented block, as in our instrumented block, we also need to determine whether we should take the branch or not. But instead of branching directly to the target, just like for the non-conditional branches we use `gum_exec_block_write_jmp_transfer_code` to write code to jump back into stalker via the relevant entry gate passing the real address we would have branched to. Note, however that the branch is inverted from the original (e.g. `CBZ` would be replaced by `CBNZ`).
 
 ### gum_exec_block_virtualize_ret_insn
 
