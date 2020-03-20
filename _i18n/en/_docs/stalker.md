@@ -1283,7 +1283,20 @@ Let's now look in more detail at the *virtaulizing* we have for replacing the br
 We can see that two of these relate to to syscalls (and in fact, one calls the other), we will cover these later. Let's look at the ones for branches and returns.
 
 ### gum_exec_block_virtualize_branch_insn
-This routine first determines whether the dstination of the branch comes from an immediate offset in the instruction, or a register. In the case of the latter, we don't extract the value just yet, we only determine which register. This is referred to as the `target`. The next section of the function deals with branch instructions. This includes both conditional and non-conditional branches. For conditional targets the destination if the branch is not taken is referred to as `cond_target`. 
+This routine first determines whether the destination of the branch comes from an immediate offset in the instruction, or a register. In the case of the latter, we don't extract the value just yet, we only determine which register. This is referred to as the `target`. The next section of the function deals with branch instructions. This includes both conditional and non-conditional branches. For conditional targets the destination if the branch is not taken is referred to as `cond_target`, this is set to the address of the next instruction in the original block. 
+
+Likewise `regular_entry_func` and `cond_entry_func` are used to hold the entry gates which will be used to handle the branch. The former is used to hold the gate used for non-conditional branches and `cond_entry_func` holds the gate to be used for a conditional branch (whether it is taken or not).
+
+The function `gum_exec_block_write_jmp_transfer_code` is used to write the code required to branch the the entry gate. For non-conditional branches this is simple, we call the function passing the `target` and the `regular_entry_func`. For conditional branches things are slightly more complicated. Our output looks like the following pseudo-code:
+
+```
+  INVERSE_OF_ORIGINAL_BRANCH(is_false)
+  jmp_transfer_code(target, cond_entry_func)
+is_false:
+  jmp_transfer_code(cond_target, cond_entry_func)
+```
+
+Here, we can see that we first write a branch instruction into our instrumented block, as in our instrumented block, we also need to determine whether we should take the branch or not. But instead of branching directly to the target, just like for the non-conditional branches we use `gum_exec_block_write_jmp_transfer_code` to write code to jump back into stalker via the relevant entry gate passing the real address we would have branched to.
 
 ### gum_exec_block_virtualize_ret_insn
 
