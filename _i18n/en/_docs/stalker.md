@@ -1677,7 +1677,9 @@ else:
   return x0  
 ```
 
-We can see that it first checks if we are dealing with a `clone` syscall, otherwise it simply performs the original syscall and that is all (the original syscall instruction is copied from the original block). Otherwise if it is a clone syscall, then we again perform the original syscall. At this point, we have two threads of execution, the syscall determines that each thread will [return a different value](http://man7.org/linux/man-pages/man2/clone.2.html).
+We can see that it first checks if we are dealing with a `clone` syscall, otherwise it simply performs the original syscall and that is all (the original syscall instruction is copied from the original block). Otherwise if it is a clone syscall, then we again perform the original syscall. At this point, we have two threads of execution, the syscall determines that each thread will [return a different value](http://man7.org/linux/man-pages/man2/clone.2.html). The original thread will receive the child's PID as it's return value, whereas the child will receive the value of 0.
+
+If we receive a non-zero value, we can simply continue as we were. We want to continue stalking the thread and allow execution to carry on with the next instruction. If, however, we receive a return value of 0, then we are in the child thread. We therefore carry out a branch to the next instruction in the original block ensuring that the child continues to run without any interruption from stalker.
 
 ### Pointer Authentication
 
