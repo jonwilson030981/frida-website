@@ -1590,6 +1590,43 @@ Here, we can see that the iterator records when it sees an exclusive load and tr
   }
 ```
 ### Exhausted Blocks
+```
+gboolean
+gum_stalker_iterator_next (GumStalkerIterator * self,
+                           const cs_insn ** insn)
+{
+    ...
+ 
+    if (gum_exec_block_is_full (block))
+    {
+      gc->continuation_real_address = instruction->end;
+      return FALSE;
+    }
+    
+    ...
+}
+
+
+static GumExecBlock *
+gum_exec_ctx_obtain_block_for (GumExecCtx * ctx,
+                               gpointer real_address,
+                               gpointer * code_address_ptr)
+{
+  ...
+
+  if (gc.continuation_real_address != NULL)
+  {
+    GumBranchTarget continue_target = { 0, };
+
+    continue_target.absolute_address = gc.continuation_real_address;
+    continue_target.reg = ARM64_REG_INVALID;
+    gum_exec_block_write_jmp_transfer_code (block, &continue_target,
+        GUM_ENTRYGATE (jmp_continuation), &gc);
+  }
+  
+  ...
+}
+```
 
 ### Sysenter Virtualization
 
