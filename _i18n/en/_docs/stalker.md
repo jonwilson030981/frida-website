@@ -1590,7 +1590,7 @@ Here, we can see that the iterator records when it sees an exclusive load and tr
   }
 ```
 ### Exhausted Blocks
-Whilst we check to ensure a minimum amount of space for our current instrumented block is left in the slab before we start (and allocate a new one if we fall below this minimum), we cannot predict how long a sequence of instructions we are likely to encounter in our input block. Nor is it simple to detemine exactly how many instructions in output we will need to write the necessary instrumentation (we have possible code for emitting the different types of event, checking for excluded ranges, virtualizing instructions found at the end of the block etc). Also, trying to allow for the instrumented code to be non-sequential is fraught with difficulty. So the approach taken is to ensure that each time we read a new instruction from the interator there is at least 1024 bytes of space in the slab for our output. If it is not, then we 
+Whilst we check to ensure a minimum amount of space for our current instrumented block is left in the slab before we start (and allocate a new one if we fall below this minimum), we cannot predict how long a sequence of instructions we are likely to encounter in our input block. Nor is it simple to detemine exactly how many instructions in output we will need to write the necessary instrumentation (we have possible code for emitting the different types of event, checking for excluded ranges, virtualizing instructions found at the end of the block etc). Also, trying to allow for the instrumented code to be non-sequential is fraught with difficulty. So the approach taken is to ensure that each time we read a new instruction from the interator there is at least 1024 bytes of space in the slab for our output. If it is not, then we store the current address in `continuation_real_address` and return `FALSE` so that the iterator ends. 
 ```
 #define GUM_EXEC_BLOCK_MIN_SIZE 1024
 
@@ -1616,8 +1616,11 @@ gum_stalker_iterator_next (GumStalkerIterator * self,
     
     ...
 }
+```
 
+Our caller `gum_exec_ctx_obtain_block_for` which is walking the iterator to generate the block then acts exactly as if there was a branch instruction to the next instruction, essentially terminating the current block and starting the next one.
 
+```
 static GumExecBlock *
 gum_exec_ctx_obtain_block_for (GumExecCtx * ctx,
                                gpointer real_address,
@@ -1637,6 +1640,12 @@ gum_exec_ctx_obtain_block_for (GumExecCtx * ctx,
   
   ...
 }
+```
+
+It is as if the following instructions had been encountered in the input right before the instruction which would have not had sufficient space:
+```
+  B label
+label:
 ```
 
 ### Sysenter Virtualization
