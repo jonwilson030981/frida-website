@@ -1682,5 +1682,27 @@ We can see that it first checks if we are dealing with a `clone` syscall, otherw
 If we receive a non-zero value, we can simply continue as we were. We want to continue stalking the thread and allow execution to carry on with the next instruction. If, however, we receive a return value of 0, then we are in the child thread. We therefore carry out a branch to the next instruction in the original block ensuring that the child continues to run without any interruption from stalker.
 
 ### Pointer Authentication
-Last of all, we should note that newer versions of iOS have [introduced](https://ivrodriguez.com/pointer-authentication-on-armv8-3/) [pointer authentication codes](https://events.static.linuxfound.org/sites/events/files/slides/slides_23.pdf). Pointer authentication codes make use of unused bits in pointers (the high bits of virtual addresses are commonly unused as most systems have a maximum of 48-bits of virtual address space) to store authentication values. These values are calculated by using the original pointer, a context parameter (typically the contents of another register) and a cryptographic key. The idea is that the key cannot be read or written from user-mode, and the resulting pointer authentication code cannot be guessed without having access to it.
+Last of all, we should note that newer versions of iOS have [introduced](https://ivrodriguez.com/pointer-authentication-on-armv8-3/) [pointer authentication codes](https://events.static.linuxfound.org/sites/events/files/slides/slides_23.pdf). Pointer authentication codes (PACs) make use of unused bits in pointers (the high bits of virtual addresses are commonly unused as most systems have a maximum of 48-bits of virtual address space) to store authentication values. These values are calculated by using the original pointer, a context parameter (typically the contents of another register) and a cryptographic key. The idea is that the key cannot be read or written from user-mode, and the resulting pointer authentication code cannot be guessed without having access to it.
+
+Let's look at the following fragment of code:
+
+```
+pacia lr, sp
+stp fp, lr, [sp, #-FRAME_SIZE]!
+mov fp, sp
+
+...
+
+ldp fp, lr, [sp], #FRAME_SIZE
+autia lr, sp
+ret lr
+```
+
+The `pacia` instruction combines the values of `LR`, `SP` and the key to generate a version of `LR` with the authentication code `LR'` and stores back into the `LR` register. This value is stored in the stack and later restored at the end of the function. The `autia` instruction validates the value of `LR'`. This is possible since the PAC in the high bits of `LR` can be stripped to give the original `LR` value and the pointer authentication code can be regenerated as it was before using `SP` and the key. The result is checked against `LR'`. If the value doesn't match then the instruction generates a fault. Thus if the value of `LR` stored in the stack is modified, or the stack pointer itself is corrupted then the validation will fail. This is useful to prevent the building of ROP chains which require return addresses to be stored in the stack. Since `LR'` is now stored in the stack instead of `LR`, valid return addresses cannot be forged without the key.
+
+FRIDA needs to take this into account also when generating code. When reading pointers from registers used by the application (e.g. to determine the destination of an indirect branch or return), it is necessary to strip these pointer authentication codes from the address before it is used. This is achieved using the function `gum_arm64_writer_put_xpaci_reg`.
+
+
+
+
 
