@@ -1512,6 +1512,8 @@ gum_stalker_unfollow (GumStalker * self,
 This function looks through the list of contexts looking for the one for the requested thread. Again, it sets the state of the context to `GUM_EXEC_CTX_UNFOLLOW_PENDING`. If the thread has already run, we must wait for it to check this flag and return to normal execution. However, if it has not run (perhaps it was in a blocking syscall when we asked to follow it and never got infected in the first instance) then we can *disinfect* it ourselves by calling `gum_process_modify_thread` to modify the thread context (this function was described in detail earlier) and using `gum_stalker_disinfect` as our callback to perform the changes. This simply checks to see if the program counter was set to point to the `infect_thunk` and resets the program pointer back to its original value. The `infect_thunk` is created by `gum_stalker_infect` which is the callback used by `gum_stalker_follow` to modify the context. Recall that whilst some of the setup can be carried out on behalf of the target thread, some has to be done in the context of the target thread itself (in particular settings variables in thread local storage)? Well, it is the `infect_thunk` which contains that code. 
 
 ## Miscelaneous
+Hopefully we have now covered the most important aspects of stalker and have provided a good background on how it works. We do have a few other observations though, which may be of interest.
+
 ### Exclusive Store
 ### Pointer Authentication
 ### Sysenter Virtualization
