@@ -1320,7 +1320,8 @@ gum_exec_ctx_load_real_register_from_minimal_frame_into (
   {
     gum_arm64_writer_put_ldr_reg_reg_offset (cw, 
         target_register, ARM64_REG_X20,
-        (11 * 16) + (4 * 32) + ((source_register - ARM64_REG_X19) * 8));
+        (11 * 16) + (4 * 32) + 
+        ((source_register - ARM64_REG_X19) * 8));
   }
   else if (source_register == ARM64_REG_X29 || 
       source_register == ARM64_REG_X30)
