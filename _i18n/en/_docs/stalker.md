@@ -885,52 +885,70 @@ gum_exec_ctx_write_prolog_helper (GumExecCtx * ctx,
         ARM64_REG_X20, ARM64_REG_X21);
 
 
-    // Store x19 (currently holding the LR value for this function to 
-    // return to, the address of the caller written by 
-    // gum_exec_ctx_write_prolog) in x20 temporarily. We have already
-    // pushed x20 so we can use it freely, but we want to push the apps
-    // value of x19 into the context. This was pushed onto the stack
-    // by the code in gum_exec_ctx_write_prolog so we can restore it
-    // from there before we push it.
-    gum_arm64_writer_put_mov_reg_reg (cw, ARM64_REG_X20, ARM64_REG_X19);
+    // Store x19 (currently holding the LR value for this function
+    // to return to, the address of the caller written by 
+    // gum_exec_ctx_write_prolog) in x20 temporarily. We have 
+    // already pushed x20 so we can use it freely, but we want to 
+    // push the apps value of x19 into the context. This was 
+    // pushed onto the stack by the code in 
+    // gum_exec_ctx_write_prolog so we can restore it from there 
+    // before we push it.
+    gum_arm64_writer_put_mov_reg_reg (cw, 
+        ARM64_REG_X20, ARM64_REG_X19);
 
 
-    // Restore X19 from the value pushed by the prolog before the call to the
-    // helper
-    gum_arm64_writer_put_ldr_reg_reg_offset (cw, ARM64_REG_X19, ARM64_REG_SP,
+    // Restore X19 from the value pushed by the prolog before the 
+    // call to the elper
+    gum_arm64_writer_put_ldr_reg_reg_offset (cw, 
+        ARM64_REG_X19, ARM64_REG_SP,
         (6 * 16) + (4 * 32));
 
-    // Push the apps values of x18 and x19. x18 was unmodified. We have 
-    // corrected x19 above.
-    gum_arm64_writer_put_push_reg_reg (cw, ARM64_REG_X18, ARM64_REG_X19);
+    // Push the apps values of x18 and x19. x18 was unmodified. We
+    // have corrected x19 above.
+    gum_arm64_writer_put_push_reg_reg (cw, 
+        ARM64_REG_X18, ARM64_REG_X19);
 
 
     // Restore x19 from x20
-    gum_arm64_writer_put_mov_reg_reg (cw, ARM64_REG_X19, ARM64_REG_X20);
+    gum_arm64_writer_put_mov_reg_reg (cw, 
+        ARM64_REG_X19, ARM64_REG_X20);
 
 
-    gum_arm64_writer_put_push_reg_reg (cw, ARM64_REG_X16, ARM64_REG_X17);
-    gum_arm64_writer_put_push_reg_reg (cw, ARM64_REG_X14, ARM64_REG_X15);
-    gum_arm64_writer_put_push_reg_reg (cw, ARM64_REG_X12, ARM64_REG_X13);
-    gum_arm64_writer_put_push_reg_reg (cw, ARM64_REG_X10, ARM64_REG_X11);
-    gum_arm64_writer_put_push_reg_reg (cw, ARM64_REG_X8, ARM64_REG_X9);
-    gum_arm64_writer_put_push_reg_reg (cw, ARM64_REG_X6, ARM64_REG_X7);
-    gum_arm64_writer_put_push_reg_reg (cw, ARM64_REG_X4, ARM64_REG_X5);
-    gum_arm64_writer_put_push_reg_reg (cw, ARM64_REG_X2, ARM64_REG_X3);
-    gum_arm64_writer_put_push_reg_reg (cw, ARM64_REG_X0, ARM64_REG_X1);
+    gum_arm64_writer_put_push_reg_reg (cw, 
+        ARM64_REG_X16, ARM64_REG_X17);
+    gum_arm64_writer_put_push_reg_reg (cw, 
+        ARM64_REG_X14, ARM64_REG_X15);
+    gum_arm64_writer_put_push_reg_reg (cw, 
+        ARM64_REG_X12, ARM64_REG_X13);
+    gum_arm64_writer_put_push_reg_reg (cw, 
+        ARM64_REG_X10, ARM64_REG_X11);
+    gum_arm64_writer_put_push_reg_reg (cw, 
+        ARM64_REG_X8, ARM64_REG_X9);
+    gum_arm64_writer_put_push_reg_reg (cw, 
+        ARM64_REG_X6, ARM64_REG_X7);
+    gum_arm64_writer_put_push_reg_reg (cw, 
+        ARM64_REG_X4, ARM64_REG_X5);
+    gum_arm64_writer_put_push_reg_reg (cw, 
+        ARM64_REG_X2, ARM64_REG_X3);
+    gum_arm64_writer_put_push_reg_reg (cw, 
+        ARM64_REG_X0, ARM64_REG_X1);
 
 
     /* GumCpuContext.pc + sp */
 
 
-    // We are going to store the PC and SP here. The PC is set to zero,
-    // for the SP, we have to calculate the original SP before we stored
-    // all of this context information. Note we use the zero register
-    // here (a special register in aarch64 which always has the value 0)
-    gum_arm64_writer_put_mov_reg_reg (cw, ARM64_REG_X0, ARM64_REG_XZR);
-    gum_arm64_writer_put_add_reg_reg_imm (cw, ARM64_REG_X1, ARM64_REG_SP,
+    // We are going to store the PC and SP here. The PC is set to
+    // zero, for the SP, we have to calculate the original SP 
+    // before we stored all of this context information. Note we 
+    // use the zero register here (a special register in aarch64 
+    // which always has the value 0)
+    gum_arm64_writer_put_mov_reg_reg (cw, 
+        ARM64_REG_X0, ARM64_REG_XZR);
+    gum_arm64_writer_put_add_reg_reg_imm (cw, 
+        ARM64_REG_X1, ARM64_REG_SP,
         (16 * 16) + (4 * 32) + 16 + GUM_RED_ZONE_SIZE);
-    gum_arm64_writer_put_push_reg_reg (cw, ARM64_REG_X0, ARM64_REG_X1);
+    gum_arm64_writer_put_push_reg_reg (cw, 
+        ARM64_REG_X0, ARM64_REG_X1);
 
 
     immediate_for_sp += sizeof (GumCpuContext) + 8;
@@ -939,31 +957,34 @@ gum_exec_ctx_write_prolog_helper (GumExecCtx * ctx,
   // Store the Arithmetic Logic Unit flags into x15. Whilst it might
   // appear that the above add instruction used to calculate the
   // original stack pointer may have changed the flags, AARCH64 has
-  // and ADD instruction which doesn't modify the condition flags and
-  // an ADDS instruction which does.
+  // and ADD instruction which doesn't modify the condition flags
+  // and an ADDS instruction which does.
   gum_arm64_writer_put_instruction (cw, mrs_x15_nzcv);
 
 
-  /* conveniently point X20 at the beginning of the saved registers */
+  /* conveniently point X20 at the beginning of the saved
+     registers */
   // X20 is used later by functions such as
-  // gum_exec_ctx_load_real_register_from_full_frame_into to emit code which
-  // refrences the saved frame.
+  // gum_exec_ctx_load_real_register_from_full_frame_into to emit 
+  // code which refrences the saved frame.
   gum_arm64_writer_put_mov_reg_reg (cw, ARM64_REG_X20, ARM64_REG_SP);
 
 
   /* padding + status */
-  // This pushes the flags to ensure that they can be restored correctly after
-  // executing inside of stalker.
-  gum_arm64_writer_put_push_reg_reg (cw, ARM64_REG_X14, ARM64_REG_X15);
+  // This pushes the flags to ensure that they can be restored 
+  // correctly after executing inside of stalker.
+  gum_arm64_writer_put_push_reg_reg (cw, 
+      ARM64_REG_X14, ARM64_REG_X15);
   immediate_for_sp += 1 * 16;
 
-  // We saved our LR into R19 on entry so that we could branch back to the 
-  // instrumented code once this helper has run. Although the instrumented code 
-  // called us, We restored LR to its previous value before the helper was 
-  // called (the app code). Although the LR is not callee-saved (e.g. it is 
-  // not our responsibility to save and restore it on return, but rather that
-  // of our caller), it is done here to minimize the code size of the inline
-  // stub in the instrumented block.
+  // We saved our LR into R19 on entry so that we could branch back 
+  // to the instrumented code once this helper has run. Although 
+  // the instrumented code called us, We restored LR to its previous
+  // value before the helper was called (the app code). Although the
+  // LR is not callee-saved (e.g. it is not our responsibility to 
+  // save and restore it on return, but rather that of our caller), 
+  // it is done here to minimize the code size of the inline stub in 
+  // the instrumented block.
   gum_arm64_writer_put_br_reg_no_auth (cw, ARM64_REG_X19);
 }
 ```
