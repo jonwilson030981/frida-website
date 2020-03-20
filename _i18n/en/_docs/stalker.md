@@ -1515,6 +1515,72 @@ This function looks through the list of contexts looking for the one for the req
 Hopefully we have now covered the most important aspects of stalker and have provided a good background on how it works. We do have a few other observations though, which may be of interest.
 
 ### Exclusive Store
+The AARCH64 architecture has support for [exclusive load/store instruction](https://static.docs.arm.com/100934/0100/armv8_a_synchronization_primitives_100934_0100_en.pdf) these instructions are intended to be used for synchronization. If an exclusive load is performed from a given address, then later attempts an exclusive store to the same location, then the CPU is able to detect any other stores (exclusive or otherwise) to the same location in the intervening period and the store fails.
+
+Obviously, these types of primitives are likely to be used for constructs such as mutexes and semaphores. Multiple threads may attempt to load the current count of the semaphore, test whether is it already full, then increment and store the new value back to take the semaphore. These exclusive operations are ideal for just such a scenario. Consider though what would happen if mulitiple threads are competing for the same resource. If one of those threads were being traced by stalker, it would always lose the race. Stalker, however, deals with such a scenario:
+
+```
+gboolean
+gum_stalker_iterator_next (GumStalkerIterator * self,
+                           const cs_insn ** insn)
+{
+
+  ...
+
+    switch (instruction->ci->id)
+    {
+      case ARM64_INS_STXR:
+      case ARM64_INS_STXP:
+      case ARM64_INS_STXRB:
+      case ARM64_INS_STXRH:
+      case ARM64_INS_STLXR:
+      case ARM64_INS_STLXP:
+      case ARM64_INS_STLXRB:
+      case ARM64_INS_STLXRH:
+        gc->exclusive_load_offset = GUM_INSTRUCTION_OFFSET_NONE;
+        break;
+      default:
+        break;
+    }
+
+    if (gc->exclusive_load_offset != GUM_INSTRUCTION_OFFSET_NONE)
+    {
+      gc->exclusive_load_offset++;
+      if (gc->exclusive_load_offset == 4)
+        gc->exclusive_load_offset = GUM_INSTRUCTION_OFFSET_NONE;
+    }
+  }
+  
+  ...
+  
+}
+
+void
+gum_stalker_iterator_keep (GumStalkerIterator * self)
+{
+  ...
+
+  switch (insn->id)
+  {
+    case ARM64_INS_LDAXR:
+    case ARM64_INS_LDAXP:
+    case ARM64_INS_LDAXRB:
+    case ARM64_INS_LDAXRH:
+    case ARM64_INS_LDXR:
+    case ARM64_INS_LDXP:
+    case ARM64_INS_LDXRB:
+    case ARM64_INS_LDXRH:
+      gc->exclusive_load_offset = 0;
+      break;
+    default:
+      break;
+  }
+  
+  ...
+}
+```
+
+
 ### Pointer Authentication
 ### Sysenter Virtualization
 
