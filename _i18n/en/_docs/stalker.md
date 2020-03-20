@@ -1304,9 +1304,7 @@ Finally, if it is just a normal call expression, then we use the function `gum_e
 
 Remember earlier that in `gum_exec_block_virtualize_branch_insn`, we could only check if our call was to an excluded range if the target was specified in an immediate? Well if the target was specified in a register, then here we emit code to check whether the target was in an excluded range. This is done by loading the target regsiter using `gum_exec_ctx_write_push_branch_target_address` (which in turn calls `gum_exec_ctx_load_real_register_into` which we covered ealier to read the context) and emitting code to call `gum_exec_block_check_address_for_exclusion` whose implementation is quite self explanatory. If it is excluded then a branch is taken and similar code to that described when handling excluded immediate calls discussed above is used. 
 
-Next we emit code to call the entry gate and generate the instrumented block. Then call the helper `last_stack_push` to add our `GumExecFrame` to our context containing the original and instrumented block address.  
-
-`gum_exec_block_write_exec_generated_code`
+Next we emit code to call the entry gate and generate the instrumented block of the callee. Then call the helper `last_stack_push` to add our `GumExecFrame` to our context containing the original and instrumented block address. The real and instrumented code addresses are read from the current cursor positions of the GeneratorContext and CodeWriter respectively and we then generate the required instrumented block for the return address (this is the optimization we covered earlier, we can jump straight to this block when executing the virtualized return statement rather than re-entering stalker). Lastly we use `gum_exec_block_write_exec_generated_code` to emit code to branch to the instrumented callee.
 
 
 ### gum_exec_block_virtualize_ret_insn
