@@ -1273,10 +1273,19 @@ gum_stalker_dump_counters (void)
   GUM_PRINT_ENTRYGATE_COUNTER (jmp_continuation);
 }
 ```
-
-# TODO
-
 ## Virtualize functions
+Let's now look in more detail at the *virtaulizing* we have for replacing the branch instruction we find at the end of each block. We have four of these functions:
+* `gum_exec_block_virtualize_branch_insn`
+* `gum_exec_block_virtualize_ret_insn`
+* `gum_exec_block_virtualize_sysenter_insn`
+* `gum_exec_block_virtualize_linux_sysenter`
+
+We can see that two of these relate to to syscalls (and in fact, one calls the other), we will cover these later. Let's look at the ones for branches and returns.
+
+### gum_exec_block_virtualize_branch_insn
+This routine first determines whether the dstination of the branch comes from an immediate offset in the instruction, or a register. In the case of the latter, we don't extract the value just yet, we only determine which register. This is referred to as the `target`. The next section of the function deals with branch instructions. This includes both conditional and non-conditional branches. For conditional targets the destination if the branch is not taken is referred to as `cond_target`. 
+
+### gum_exec_block_virtualize_ret_insn
 
 ## Emitting events
 write_X_event_code
