@@ -1483,8 +1483,8 @@ gum_exec_block_write_unfollow_check_code (GumExecBlock * block,
 
   gum_arm64_writer_put_ldr_reg_address (cw, ARM64_REG_X16,
       GUM_ADDRESS (&ctx->resume_at));
-  gum_arm64_writer_put_ldr_reg_reg_offset (cw, ARM64_REG_X17, ARM64_REG_X16,
-      0);
+  gum_arm64_writer_put_ldr_reg_reg_offset (cw, 
+      ARM64_REG_X17, ARM64_REG_X16, 0);
   gum_arm64_writer_put_br_reg_no_auth (cw, ARM64_REG_X17);
 
   gum_arm64_writer_put_label (cw, beach);
@@ -1494,7 +1494,8 @@ static gboolean
 gum_exec_ctx_maybe_unfollow (GumExecCtx * ctx,
                              gpointer resume_at)
 {
-  if (g_atomic_int_get (&ctx->state) != GUM_EXEC_CTX_UNFOLLOW_PENDING)
+  if (g_atomic_int_get (&ctx->state) != 
+      GUM_EXEC_CTX_UNFOLLOW_PENDING)
     return FALSE;
 
   if (ctx->pending_calls > 0)
@@ -1558,7 +1559,8 @@ static void
 gum_stalker_class_init (GumStalkerClass * klass)
 {
   ...
-  gum_unfollow_me_address = gum_strip_code_pointer (gum_stalker_unfollow_me);
+  gum_unfollow_me_address = gum_strip_code_pointer (
+      gum_stalker_unfollow_me);
   ...
 }
 
@@ -1579,8 +1581,8 @@ gum_exec_ctx_replace_current_block_with (GumExecCtx * ctx,
   
   else
   {
-    ctx->current_block = gum_exec_ctx_obtain_block_for (ctx, start_address,
-        &ctx->resume_at);
+    ctx->current_block = gum_exec_ctx_obtain_block_for (ctx, 
+        start_address, &ctx->resume_at);
 
     ...
   }
@@ -1613,7 +1615,8 @@ gum_stalker_unfollow (GumStalker * self,
       GumExecCtx * ctx = (GumExecCtx *) cur->data;
 
       if (ctx->thread_id == thread_id &&
-          g_atomic_int_compare_and_exchange (&ctx->state, GUM_EXEC_CTX_ACTIVE,
+          g_atomic_int_compare_and_exchange (&ctx->state, 
+              GUM_EXEC_CTX_ACTIVE,
               GUM_EXEC_CTX_UNFOLLOW_PENDING))
       {
         GUM_STALKER_UNLOCK (self);
@@ -1625,7 +1628,8 @@ gum_stalker_unfollow (GumStalker * self,
           dc.exec_ctx = ctx;
           dc.success = FALSE;
 
-          gum_process_modify_thread (thread_id, gum_stalker_disinfect, &dc);
+          gum_process_modify_thread (thread_id, 
+              gum_stalker_disinfect, &dc);
 
           if (dc.success)
             gum_stalker_destroy_exec_ctx (self, ctx);
@@ -1717,7 +1721,8 @@ Here, we can see that the iterator records when it sees an exclusive load and tr
   if ((ec->sink_mask & GUM_EXEC) != 0 &&
       gc->exclusive_load_offset == GUM_INSTRUCTION_OFFSET_NONE)
   {
-    gum_exec_block_write_exec_event_code (block, gc, GUM_CODE_INTERRUPTIBLE);
+    gum_exec_block_write_exec_event_code (block, gc, 
+        GUM_CODE_INTERRUPTIBLE);
   }
 ```
 ### Exhausted Blocks
