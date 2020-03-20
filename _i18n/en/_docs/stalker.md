@@ -1298,7 +1298,15 @@ is_false:
 
 Here, we can see that we first write a branch instruction into our instrumented block, as in our instrumented block, we also need to determine whether we should take the branch or not. But instead of branching directly to the target, just like for the non-conditional branches we use `gum_exec_block_write_jmp_transfer_code` to write code to jump back into stalker via the relevant entry gate passing the real address we would have branched to. Note, however that the branch is inverted from the original (e.g. `CBZ` would be replaced by `CBNZ`).
 
+Now, lets look at how `gum_exec_block_virtualize_branch_insn` handles calls. First we check if there are any probes attached to the target address. If there are, then we call `gum_exec_block_write_call_probe_code` to emit the code necessary to call the probe callback. Next, we check if the call is to an excluded range (note that we can only do this if the call is to an immediate address), if it is then we emit the instruction as is. But we follow this by using `gum_exec_block_write_jmp_transfer_code` as we did when handling branches to emit code to call back into stalker right after to instrument the block at the return address. Note that here we use the `excluded_call_imm` entry gate.
+
+Finally, if it is just a normal call expression, then we use the function `gum_exec_block_write_call_invoke_code` to emit the code to handle the call. This function is pretty complicated as a result of all of the optimization for backpatching, so we will only look at the basics.
+
+Remember earlier that in `gum_exec_block_virtualize_branch_insn`, we could only check if our call was to an excluded range if the target was specified in an immediate? Well if not, then here we
+
+
 ### gum_exec_block_virtualize_ret_insn
+
 
 ## Emitting events
 write_X_event_code
