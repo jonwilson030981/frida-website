@@ -1580,7 +1580,20 @@ gum_stalker_iterator_keep (GumStalkerIterator * self)
 }
 ```
 
+Here, we can see that the iterator records when it sees an exclusive load and tracks how many instructions have passed since. It seems that this is continued for up to four instructions, presumably this was determined by empirical testing, although it does make some sense as this is about how many instructions would be needed to load, test, modify and store the value. This is then used to prevent any instrumentation being emitted which isn't strictly necessary:
+
+```
+  if ((ec->sink_mask & GUM_EXEC) != 0 &&
+      gc->exclusive_load_offset == GUM_INSTRUCTION_OFFSET_NONE)
+  {
+    gum_exec_block_write_exec_event_code (block, gc, GUM_CODE_INTERRUPTIBLE);
+  }
+```
+### Exhausted Blocks
+
+### Sysenter Virtualization
+
 
 ### Pointer Authentication
-### Sysenter Virtualization
+
 
