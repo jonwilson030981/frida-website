@@ -794,13 +794,20 @@ gum_exec_ctx_write_prolog_helper (GumExecCtx * ctx,
 
   if (type == GUM_PROLOG_MINIMAL)
   {
-    // Store all of the FP/NEON registers. NEON is the SIMD engine on
-    // on the ARM core which allows operations to be carried out on
-    // multiple inputs at once.
-    gum_arm64_writer_put_push_reg_reg (cw, ARM64_REG_Q6, ARM64_REG_Q7);
-    gum_arm64_writer_put_push_reg_reg (cw, ARM64_REG_Q4, ARM64_REG_Q5);
-    gum_arm64_writer_put_push_reg_reg (cw, ARM64_REG_Q2, ARM64_REG_Q3);
-    gum_arm64_writer_put_push_reg_reg (cw, ARM64_REG_Q0, ARM64_REG_Q1);
+    // Store all of the FP/NEON registers. NEON is the SIMD engine
+    // on the ARM core which allows operations to be carried out 
+    // on multiple inputs at once.
+    gum_arm64_writer_put_push_reg_reg (cw, 
+        ARM64_REG_Q6, ARM64_REG_Q7);
+        
+    gum_arm64_writer_put_push_reg_reg (cw, 
+        ARM64_REG_Q4, ARM64_REG_Q5);
+        
+    gum_arm64_writer_put_push_reg_reg (cw, 
+        ARM64_REG_Q2, ARM64_REG_Q3);
+        
+    gum_arm64_writer_put_push_reg_reg (cw, 
+        ARM64_REG_Q0, ARM64_REG_Q1);
 
 
     immediate_for_sp += 4 * 32;
@@ -808,51 +815,74 @@ gum_exec_ctx_write_prolog_helper (GumExecCtx * ctx,
 
     // x29 is Frame Pointer
     // x30 is the link register
-    gum_arm64_writer_put_push_reg_reg (cw, ARM64_REG_X29, ARM64_REG_X30);
+    gum_arm64_writer_put_push_reg_reg (cw, 
+        ARM64_REG_X29, ARM64_REG_X30);
 
 
-    // We are using STP here to push pairs of registers. We actually have an
-    // odd number to push, so we just push STALKER_REG_CTX as padding to make
-    // up the numbers
+    // We are using STP here to push pairs of registers. We actually
+    // have an odd number to push, so we just push STALKER_REG_CTX 
+    // as padding to make up the numbers
     /* X19 - X28 are callee-saved registers */
     
-    // If we are only calling compiled C code, then the compiler should ensure 
-    // that should a function use registers x19 through x28 then their values 
-    // will be preserved. Hence, we don't need to store them here as they will 
-    // not be modified. If however, we make a call out, then we want the stalker
-    // end user to have visibility of the full register set and to be able to 
-    // make any modifications they see fit to them.
-    gum_arm64_writer_put_push_reg_reg (cw, ARM64_REG_X18, ARM64_REG_X30);
-    gum_arm64_writer_put_push_reg_reg (cw, ARM64_REG_X16, ARM64_REG_X17);
-    gum_arm64_writer_put_push_reg_reg (cw, ARM64_REG_X14, ARM64_REG_X15);
-    gum_arm64_writer_put_push_reg_reg (cw, ARM64_REG_X12, ARM64_REG_X13);
-    gum_arm64_writer_put_push_reg_reg (cw, ARM64_REG_X10, ARM64_REG_X11);
-    gum_arm64_writer_put_push_reg_reg (cw, ARM64_REG_X8, ARM64_REG_X9);
-    gum_arm64_writer_put_push_reg_reg (cw, ARM64_REG_X6, ARM64_REG_X7);
-    gum_arm64_writer_put_push_reg_reg (cw, ARM64_REG_X4, ARM64_REG_X5);
-    gum_arm64_writer_put_push_reg_reg (cw, ARM64_REG_X2, ARM64_REG_X3);
-    gum_arm64_writer_put_push_reg_reg (cw, ARM64_REG_X0, ARM64_REG_X1);
+    // If we are only calling compiled C code, then the compiler
+    // should ensure that should a function use registers x19 
+    // through x28 then their values will be preserved. Hence, 
+    // we don't need to store them here as they will not be 
+    // modified. If however, we make a call out, then we want 
+    // the stalker end user to have visibility of the full 
+    // register set and to be able to make any modifications
+    // they see fit to them.
+    gum_arm64_writer_put_push_reg_reg (cw, 
+        ARM64_REG_X18, ARM64_REG_X30);
+    gum_arm64_writer_put_push_reg_reg (cw, 
+        ARM64_REG_X16, ARM64_REG_X17);
+    gum_arm64_writer_put_push_reg_reg (cw, 
+        ARM64_REG_X14, ARM64_REG_X15);
+    gum_arm64_writer_put_push_reg_reg (cw, 
+        ARM64_REG_X12, ARM64_REG_X13);
+    gum_arm64_writer_put_push_reg_reg (cw, 
+        ARM64_REG_X10, ARM64_REG_X11);
+    gum_arm64_writer_put_push_reg_reg (cw, 
+        ARM64_REG_X8, ARM64_REG_X9);
+    gum_arm64_writer_put_push_reg_reg (cw, 
+        ARM64_REG_X6, ARM64_REG_X7);
+    gum_arm64_writer_put_push_reg_reg (cw, 
+        ARM64_REG_X4, ARM64_REG_X5);
+    gum_arm64_writer_put_push_reg_reg (cw, 
+       ARM64_REG_X2, ARM64_REG_X3);
+    gum_arm64_writer_put_push_reg_reg (cw, 
+       ARM64_REG_X0, ARM64_REG_X1);
     immediate_for_sp += 11 * 16;
   }
   else if (type == GUM_PROLOG_FULL)
   {
     /* GumCpuContext.q[128] */
-    gum_arm64_writer_put_push_reg_reg (cw, ARM64_REG_Q6, ARM64_REG_Q7);
-    gum_arm64_writer_put_push_reg_reg (cw, ARM64_REG_Q4, ARM64_REG_Q5);
-    gum_arm64_writer_put_push_reg_reg (cw, ARM64_REG_Q2, ARM64_REG_Q3);
-    gum_arm64_writer_put_push_reg_reg (cw, ARM64_REG_Q0, ARM64_REG_Q1);
+    gum_arm64_writer_put_push_reg_reg (cw, 
+        ARM64_REG_Q6, ARM64_REG_Q7);
+    gum_arm64_writer_put_push_reg_reg (cw, 
+        ARM64_REG_Q4, ARM64_REG_Q5);
+    gum_arm64_writer_put_push_reg_reg (cw, 
+        ARM64_REG_Q2, ARM64_REG_Q3);
+    gum_arm64_writer_put_push_reg_reg (cw, 
+        ARM64_REG_Q0, ARM64_REG_Q1);
 
 
     /* GumCpuContext.x[29] + fp + lr + padding */
     // x29 is Frame Pointer
     // x30 is the link register
     // x15 is pushed just for padding again
-    gum_arm64_writer_put_push_reg_reg (cw, ARM64_REG_X30, ARM64_REG_X15);
-    gum_arm64_writer_put_push_reg_reg (cw, ARM64_REG_X28, ARM64_REG_X29);
-    gum_arm64_writer_put_push_reg_reg (cw, ARM64_REG_X26, ARM64_REG_X27);
-    gum_arm64_writer_put_push_reg_reg (cw, ARM64_REG_X24, ARM64_REG_X25);
-    gum_arm64_writer_put_push_reg_reg (cw, ARM64_REG_X22, ARM64_REG_X23);
-    gum_arm64_writer_put_push_reg_reg (cw, ARM64_REG_X20, ARM64_REG_X21);
+    gum_arm64_writer_put_push_reg_reg (cw, 
+        ARM64_REG_X30, ARM64_REG_X15);
+    gum_arm64_writer_put_push_reg_reg (cw, 
+        ARM64_REG_X28, ARM64_REG_X29);
+    gum_arm64_writer_put_push_reg_reg (cw, 
+        ARM64_REG_X26, ARM64_REG_X27);
+    gum_arm64_writer_put_push_reg_reg (cw, 
+        ARM64_REG_X24, ARM64_REG_X25);
+    gum_arm64_writer_put_push_reg_reg (cw, 
+        ARM64_REG_X22, ARM64_REG_X23);
+    gum_arm64_writer_put_push_reg_reg (cw,
+        ARM64_REG_X20, ARM64_REG_X21);
 
 
     // Store x19 (currently holding the LR value for this function to 
